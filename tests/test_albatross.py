@@ -4,10 +4,10 @@
 
 import pytest
 
-from click.testing import CliRunner
+# from click.testing import CliRunner
 
-import albatross
-from albatross import cli
+# import albatross
+# from albatross import cli
 
 
 @pytest.fixture
