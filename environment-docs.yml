@@ -1,0 +1,10 @@
+# conda env create -f environment-docs.yml
+name: albatross-docs
+channels:
+- conda-forge
+- defaults
+dependencies:
+- pywps>=4.4
+- sphinx
+- nbsphinx
+- ipython
