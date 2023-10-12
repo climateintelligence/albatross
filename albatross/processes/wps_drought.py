@@ -1,4 +1,4 @@
-from pywps import Process, LiteralInput, LiteralOutput, UOM
+from pywps import Process, LiteralInput, LiteralOutput
 from pywps.app.Common import Metadata
 
 import logging
@@ -44,11 +44,11 @@ class Drought(Process):
         ]
         outputs = [
             LiteralOutput('negative_list', 'Negative List ...',
-                          #abstract='negativ list',
+                          # abstract='negativ list',
                           # keywords=['output', 'result', 'response'],
                           data_type='string'),
             LiteralOutput('positive_list', 'Postive List ...',
-                          #abstract='negativ list',
+                          # abstract='negativ list',
                           # keywords=['output', 'result', 'response'],
                           data_type='string'),
         ]
