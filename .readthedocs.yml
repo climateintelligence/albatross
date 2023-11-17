@@ -31,10 +31,13 @@ build:
     # golang: "1.19"
 
 conda:
-  environment: environment-docs.yml
+  environment: environment.yml
 
 # Optionally set the version of Python and requirements required to build your docs
 python:
-  install: 
-    - requirements: requirements_docs.txt
+  install:
+    - method: pip
+      path: .
+      extra_requirements:
+        - dev
 
