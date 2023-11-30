@@ -6,20 +6,13 @@ Albatross
 .. image:: https://img.shields.io/pypi/v/albatross.svg
         :target: https://pypi.python.org/pypi/albatross
 
-.. image:: https://img.shields.io/travis/climateintelligence/albatross.svg
-        :target: https://travis-ci.com/climateintelligence/albatross
-
 .. image:: https://readthedocs.org/projects/albatross/badge/?version=latest
         :target: https://albatross.readthedocs.io/en/latest/?version=latest
         :alt: Documentation Status
 
 .. image:: https://img.shields.io/github/license/climateintelligence/albatross.svg
-    :target: https://github.com/climateintelligence/albatross/blob/master/LICENSE.txt
+    :target: https://github.com/climateintelligence/albatross/blob/main/LICENSE
     :alt: GitHub license
-
-.. image:: https://badges.gitter.im/bird-house/birdhouse.svg
-    :target: https://gitter.im/bird-house/birdhouse?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
-    :alt: Join the chat at https://gitter.im/bird-house/birdhouse
 
 Albatross (the bird)
   *Albatross is a bird ...*
