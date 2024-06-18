@@ -12,12 +12,13 @@ import logging
 LOGGER = logging.getLogger("PYWPS")
 
 
+
 def openDAPsst(version = '3b', debug = False, anomalies = True, **kwargs):
     """
     This function downloads data from the new ERSSTv3b on the IRI data library
     kwargs should contain: startyr, endyr, startmon, endmon, nbox
     """
-    from utils import int_to_month
+    from albatross.utils import int_to_month
     from os.path import isfile
     from pydap.client import open_url
     from numpy import arange
@@ -56,6 +57,8 @@ def openDAPsst(version = '3b', debug = False, anomalies = True, **kwargs):
         '_' + DLargs['endmon'] + DLargs['endyr'] + '_nbox_' + DLargs['nbox'] + '_version' + version
 
     fp = fp + '_anoms' if anomalies else fp + '_ssts'
+
+    print( 'Path for temporary file:  %s' % (fp))
 
     seasonal_var = namedtuple('seasonal_var', ('data','lat','lon'))
 
@@ -220,6 +223,8 @@ def load_clim_file(fp, debug = False):
     # to run NIPA
     import numpy as np
     import pandas as pd
+
+    print('load_clim_file function with %s' % fp)
 
     #First get the description and years
     f = open(fp)

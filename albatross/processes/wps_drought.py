@@ -122,22 +122,26 @@ class Drought(Process):
         
 #        sst= request.inputs['sst'][0].data
 
-        import shutil
-        import tempfile
-        import urllib.request
+        # import shutil
+        # import tempfile
+        # import urllib.request
 
-        with urllib.request.urlopen(request.inputs['indicator'][0].data) as response:
-            with tempfile.NamedTemporaryFile(delete=False) as tmp_indicator:
-                shutil.copyfileobj(response, tmp_indicator)
-        with open(tmp_indicator.name) as index_file:
-            pass
+        # with urllib.request.urlopen(request.inputs['indicator'][0].data) as response:
+        #     with tempfile.NamedTemporaryFile(delete=False) as tmp_indicator:
+        #         shutil.copyfileobj(response, tmp_indicator)
+        # with open(tmp_indicator.name) as index_file:
+        #     pass
 
-        with urllib.request.urlopen(request.inputs['pr'][0].data) as response:
-            with tempfile.NamedTemporaryFile(delete=False) as tmp_pr:
-                shutil.copyfileobj(response, tmp_pr)
-        with open(tmp_pr.name) as clim_file:
-            pass
-
+        # with urllib.request.urlopen(request.inputs['pr'][0].data) as response:
+        #     with tempfile.NamedTemporaryFile(delete=False) as tmp_pr:
+        #         shutil.copyfileobj(response, tmp_pr)
+        # with open(tmp_pr.name) as clim_file:
+        #     pass
+        import os 
+        os.getcwd()
+        
+        index_file = os.getcwd() + '/DATA/nao.txt'
+        clim_file = os.getcwd() + '/DATA/APGD_prcpComo.txt'
         filename = 'testComoNAO'
 
         # #### USER INPUT ####
