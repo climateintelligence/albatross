@@ -1,8 +1,30 @@
-from pywps import Process, LiteralInput, LiteralOutput
+from pywps import Process, LiteralInput, LiteralOutput, ComplexOutput
+from pywps import FORMATS, Format
 from pywps.app.Common import Metadata
+
+# general 
+import pandas as pd
+from matplotlib import cm, pyplot as plt
+import matplotlib as mpl
+import numpy as np
+import pydap.client
+import mpl_toolkits
+import csv
+import math
+
+# drought specific functions 
+from albatross.climdiv_data import *
+from albatross.simpleNIPA import *
+import albatross.atmos_ocean_data
+# from albatross.atmos_ocean_data import *
+from albatross.utils import sstMap
+from albatross.utils import *
+
 
 import logging
 LOGGER = logging.getLogger("PYWPS")
+
+FORMAT_PNG = Format("image/png", extension=".png", encoding="base64")
 
 
 class Drought(Process):
@@ -14,10 +36,10 @@ class Drought(Process):
                          # keywords=['name', 'firstname'],
                          default = 'https://raw.githubusercontent.com/mxgiuliani00/CSI/master/NIPA/DATA/APGD_prcpComo.txt',
                          data_type='string'),
-            LiteralInput('sst', 'Monthly global sea surface temperature file',
-                         abstract='??? netcdf file',
-                         # keywords=['name', 'firstname'],
-                         data_type='string'),
+            # LiteralInput('sst', 'Monthly global sea surface temperature file',
+            #              abstract='text file of Sea surface temperature',
+            #              # keywords=['name', 'firstname'],
+            #              data_type='string'),
  #           LiteralInput('gph', 'Monthly global geopotential height file',
  #                        abstract='??? netcdf file',
  #                        # keywords=['name', 'firstname'],
@@ -34,15 +56,18 @@ class Drought(Process):
             LiteralInput('start_year', 'Start Year',
                          abstract='2020',
                          # keywords=['name', 'firstname'],
+                         default = '2020',
                          data_type='string'),
             LiteralInput('end_year', 'End Year',
                          abstract='2022',
+                         default = '2022',
                          # keywords=['name', 'firstname'],
                          data_type='string'),
             LiteralInput('bbox', 'Bounding Box',
                          abstract='bbox or other geometries',
                          # keywords=['name', 'firstname'],
-                         data_type='string')
+                         data_type='string',
+                         default = '20,30,40,50',)
         ]
         outputs = [
             # LiteralOutput('negative_list', 'Negative List ...',
@@ -91,23 +116,6 @@ class Drought(Process):
         ### original code https://github.com/mxgiuliani00/CSI/blob/master/NIPA/run_nipa.py 
         LOGGER.info("start processing")
         
-        # general 
-        import pandas as pd
-        from matplotlib import cm, pyplot as plt
-        import matplotlib as mpl
-        import numpy as np
-        import pydap.client
-        import mpl_toolkits
-        import csv
-        import math
-
-        # drought specific functions 
-        from climdiv_data import *
-        from simpleNIPA import *
-        from atmos_ocean_data import *
-        from utils import sstMap
-        from utils import *
-
         ###########################
         LOGGER.info("Select the input-output files")
         

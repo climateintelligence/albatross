@@ -4,7 +4,7 @@ Module for loading climate division data for running NIPA
 """
 
 import os
-from atmos_ocean_data import *
+from albatross.atmos_ocean_data import *
 from os import environ as EV
 
 def get_data(kwgroups):
