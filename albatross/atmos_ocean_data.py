@@ -8,6 +8,10 @@ from os import environ as EV
 import sys
 import resource
 
+import logging
+LOGGER = logging.getLogger("PYWPS")
+
+
 def openDAPsst(version = '3b', debug = False, anomalies = True, **kwargs):
     """
     This function downloads data from the new ERSSTv3b on the IRI data library
@@ -22,7 +26,7 @@ def openDAPsst(version = '3b', debug = False, anomalies = True, **kwargs):
     import re
     from collections import namedtuple
 
-
+    ### getting NOAA raw data 
     SSTurl = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCDC/.ERSST/.version' + version + '/' + \
     '.anom/T/%28startmon%20startyr%29%28endmon%20endyr%29RANGEEDGES/T/nbox/0.0/boxAverage/dods'
     #SSTurl = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP-NCAR/.CDAS-1/.MONTHLY/.Intrinsic/.PressureLevel/.phi/P/%28700%29VALUES' +'/' + \
@@ -36,7 +40,7 @@ def openDAPsst(version = '3b', debug = False, anomalies = True, **kwargs):
         #SSTurl = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP-NCAR/.CDAS-1/.MONTHLY/.Intrinsic/.PressureLevel/.phi/P/%28700%29VALUES' +'/' + \
     #'.anom/T/%28startmon%20startyr%29%28endmon%20endyr%29RANGEEDGES/T/nbox/0.0/boxAverage/dods'
 
-    print( 'Preparing to download from %s' % (SSTurl))
+    LOGGER.info( 'Preparing to download from %s' % (SSTurl))
 
     i2m = int_to_month()
 
@@ -61,20 +65,20 @@ def openDAPsst(version = '3b', debug = False, anomalies = True, **kwargs):
         #print sys.getrecursionlimit()
         # stupid edit: remove file
         #os.remove(fp)
-        #if debug: print('Using pickled SST')
+        #if debug: LOGGER.info('Using pickled SST')
         #f = open(fp,'rb')
         #sstdata = pickle.load(f)
         #f.close()
         #var = seasonal_var(sstdata['grid'], sstdata['lat'], sstdata['lon'])
         #return var
 
-    print( 'New SST field, will save to %s' % fp)
-    print(SSTurl)
+    LOGGER.info( 'New SST field, will save to %s' % fp)
+    LOGGER.info(SSTurl)
     for kw in DLargs:
         SSTurl = re.sub(kw, DLargs[kw], SSTurl)
 
-    print('Starting download...')
-    print(SSTurl)
+    LOGGER.info('Starting download...')
+    LOGGER.info(SSTurl)
     dataset = open_url(SSTurl)
     arg = 'anom' if anomalies else 'sst'
     sst = dataset[arg]
@@ -84,18 +88,18 @@ def openDAPsst(version = '3b', debug = False, anomalies = True, **kwargs):
     t = time.data[:].squeeze()
     sstlat = dataset['Y'][:]
     sstlon = dataset['X'][:]
-    print('Download finished.')
+    LOGGER.info('Download finished.')
 
     #_Grid has shape (ntim, nlat, nlon)
 
     nseasons = 12 / kwargs['n_mon']
     if debug:
-        print('Number of seasons is %i, number of months is %i' % (nseasons, kwargs['n_mon']))
+        LOGGER.info('Number of seasons is %i, number of months is %i' % (nseasons, kwargs['n_mon']))
     ntime = len(t)
 
     idx = arange(0, ntime, nseasons).astype(int)
-    #print(idx)
-    #print(grid)
+    #LOGGER.info(idx)
+    #LOGGER.info(grid)
     sst = grid[idx]
     sstdata = {'grid':sst, 'lat':sstlat, 'lon':sstlon}
     var = seasonal_var(sst, sstlat, sstlon)
@@ -109,7 +113,7 @@ def load_slp(newFormat = False, debug = False, anomalies = True, **kwargs):
     """
     This function loads HADSLP2r data.
     """
-    from utils import slp_tf, int_to_month
+    from albatross.utils import slp_tf, int_to_month
     from netCDF4 import Dataset
     from sklearn.preprocessing import scale
     from numpy import arange, zeros, where
@@ -141,7 +145,7 @@ def load_slp(newFormat = False, debug = False, anomalies = True, **kwargs):
             slp = seasonal_var(slpdata['grid'], slpdata['lat'], slpdata['lon'])
             return slp
         return slpdata
-    print('Creating new SLP pickle from netCDF file')
+    LOGGER.info('Creating new SLP pickle from netCDF file')
 
     #_Next block takes the netCDF file and extracts the time to make
     #_a time index.
@@ -174,7 +178,7 @@ def load_slp(newFormat = False, debug = False, anomalies = True, **kwargs):
 
 
     if debug:
-        print(tiindexndex[idx][:10])
+        LOGGER.info(tiindexndex[idx][:10])
 
     lat = dat.variables['lat'][:]
     lon = dat.variables['lon'][:]
@@ -188,7 +192,7 @@ def load_slp(newFormat = False, debug = False, anomalies = True, **kwargs):
     for year, mons in enumerate(idx):
         slpavg[year] = slp[mons].mean(axis=0)
         if debug:
-            print('Averaging ', mons)
+            LOGGER.info('Averaging ', mons)
 
     #WHERE TO SCALE THE DATA?
     for i in range(nlat):
@@ -201,7 +205,7 @@ def load_slp(newFormat = False, debug = False, anomalies = True, **kwargs):
             }
     f = open(fp,'w')
     pickle.dump(slpdata,f)
-    print('SLP data saved to %s' % (fp))
+    LOGGER.info('SLP data saved to %s' % (fp))
     f.close()
     if newFormat:
         from collections import namedtuple
@@ -222,7 +226,7 @@ def load_clim_file(fp, debug = False):
     description = f.readline()
     years = f.readline()
     startyr, endyr = years[:4], years[5:9]
-    print( description)
+    LOGGER.info( description)
 
     #First load extended index
     data = np.loadtxt(fp, skiprows = 2)

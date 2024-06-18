@@ -19,6 +19,7 @@ import albatross.atmos_ocean_data
 # from albatross.atmos_ocean_data import *
 from albatross.utils import sstMap
 from albatross.utils import *
+from albatross import utils
 
 
 import logging
@@ -120,8 +121,23 @@ class Drought(Process):
         LOGGER.info("Select the input-output files")
         
 #        sst= request.inputs['sst'][0].data
-        index_file = request.inputs['indicator'][0].data  # = './DATA/nao.txt'
-        clim_file = request.inputs['pr'][0].data  # './DATA/APGD_prcpComo.txt'
+
+        import shutil
+        import tempfile
+        import urllib.request
+
+        with urllib.request.urlopen(request.inputs['indicator'][0].data) as response:
+            with tempfile.NamedTemporaryFile(delete=False) as tmp_indicator:
+                shutil.copyfileobj(response, tmp_indicator)
+        with open(tmp_indicator.name) as index_file:
+            pass
+
+        with urllib.request.urlopen(request.inputs['pr'][0].data) as response:
+            with tempfile.NamedTemporaryFile(delete=False) as tmp_pr:
+                shutil.copyfileobj(response, tmp_pr)
+        with open(tmp_pr.name) as clim_file:
+            pass
+
         filename = 'testComoNAO'
 
         # #### USER INPUT ####

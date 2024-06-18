@@ -5,6 +5,7 @@ Module for loading climate division data for running NIPA
 
 import os
 from albatross.atmos_ocean_data import *
+from albatross.utils import int_to_month
 from os import environ as EV
 
 def get_data(kwgroups):
@@ -135,7 +136,7 @@ def create_kwgroups(debug = False, climdata_startyr = 1871, n_yrs = 145, \
 	#########################################################
 
 	if debug:
-		from utils import int_to_month
+		
 		i2m = int_to_month()
 		print('Precip starts in %s-%d, ends in %s-%d' % \
 			(i2m[climdata_months[0]], climdata_startyr, i2m[climdata_months[-1]], climdata_endyr))
