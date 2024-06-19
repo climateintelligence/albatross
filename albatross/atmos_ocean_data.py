@@ -53,7 +53,7 @@ def openDAPsst(version = '3b', debug = False, anomalies = True, **kwargs):
         'endyr'        : str(kwargs['endyr']),
         'nbox'         : str(kwargs['n_mon'])
             }
-    fp = os.getcwd() + '/DATA/nipa/SST/' + DLargs['startmon'] + DLargs['startyr'] + \
+    fp = os.getcwd() + '/tests/DATA/nipa/SST/' + DLargs['startmon'] + DLargs['startyr'] + \
         '_' + DLargs['endmon'] + DLargs['endyr'] + '_nbox_' + DLargs['nbox'] + '_version' + version
 
     fp = fp + '_anoms' if anomalies else fp + '_ssts'
@@ -249,7 +249,7 @@ def load_climdata(**kwargs):
     
     data = load_clim_file(kwargs['fp'])
     from numpy import where, arange, zeros, inf
-    from utils import slp_tf
+    from albatross.utils import slp_tf
     tran = slp_tf()
     startmon = int(tran[kwargs['months'][0]])
     startyr = kwargs['startyr']
@@ -271,7 +271,7 @@ def create_phase_index(debug = False, **kwargs):
     from numpy import sort
     index = load_clim_file(kwargs['fp'])
     from numpy import where, arange, zeros, inf
-    from utils import slp_tf
+    from albatross.utils import slp_tf
     tran = slp_tf()
     startmon = int(tran[kwargs['months'][0]])
     startyr = kwargs['startyr']
@@ -322,7 +322,7 @@ def create_phase_index2(**kwargs):
     from numpy import sort
     index = load_clim_file(kwargs['fp'])
     from numpy import where, arange, zeros, inf
-    from utils import slp_tf
+    from albatross.utils import slp_tf
     tran = slp_tf()
     startmon = int(tran[kwargs['months'][0]])
     startyr = kwargs['startyr']

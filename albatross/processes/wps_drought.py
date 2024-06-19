@@ -140,8 +140,8 @@ class Drought(Process):
         import os 
         os.getcwd()
         
-        index_file = os.getcwd() + '/DATA/nao.txt'
-        clim_file = os.getcwd() + '/DATA/APGD_prcpComo.txt'
+        index_file = os.getcwd() + '/tests/DATA/nao.txt'
+        clim_file = os.getcwd() + '/tests/DATA/APGD_prcpComo.txt'
         filename = 'testComoNAO'
 
         # #### USER INPUT ####

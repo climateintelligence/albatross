@@ -74,7 +74,7 @@ class NIPAphase(object):
     def bootcorr(    self, ntim = 1000, corrconf = 0.95, bootconf = 0.80,
                     debug = False, quick = True    ):
         from numpy import meshgrid, zeros, ma, isnan, linspace
-        from utils import vcorr, sig_test
+        from albatross.utils import vcorr, sig_test
 
         corrlevel = 1 - corrconf
 
@@ -176,7 +176,7 @@ class NIPAphase(object):
         from scipy.stats import pearsonr as corr
         from scipy.stats import linregress
         from matplotlib import pyplot as plt
-        from utils import weightsst
+        from albatross.utils import weightsst
         predictand = self.clim_data
         
         if self.corr_grid.mask.sum() >= len(self.sst.lat) * len(self.sst.lon) - 4:
