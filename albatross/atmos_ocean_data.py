@@ -20,8 +20,8 @@ def openDAPsst(version = '3b', debug = False, anomalies = True, **kwargs):
     """
     from albatross.utils import int_to_month
     from os.path import isfile
-    from xarray import open_dataset
-#    from pydap.client import open_url
+    # from xarray import open_dataset
+    from pydap.client import open_url
     from numpy import arange
     from numpy import squeeze
     import pickle
@@ -83,8 +83,8 @@ def openDAPsst(version = '3b', debug = False, anomalies = True, **kwargs):
 
     LOGGER.info('Starting download...')
     LOGGER.info(SSTurl)
-    # dataset = open_url(SSTurl)         # Python 3.6 dependency
-    dataset = open_dataset(SSTurl)
+    dataset = open_url(SSTurl)         # Python 3.6 dependency
+    # dataset = open_dataset(SSTurl)
     arg = 'anom' if anomalies else 'sst'
     sst = dataset[arg]
 
