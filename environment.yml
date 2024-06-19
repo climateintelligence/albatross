@@ -10,6 +10,7 @@ dependencies:
 - click
 - psutil
 - pandas
-- matplotlib
+- matplotlib-base
+- pydap
 # tests
 - pytest
