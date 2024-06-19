@@ -3,5 +3,6 @@ include *.txt
 include *.rst
 include tox.ini
 recursive-include albatross *
+recursive-include tests *
 global-exclude __pycache__
 global-exclude *.py[co]
