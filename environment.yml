@@ -9,5 +9,8 @@ dependencies:
 - jinja2
 - click
 - psutil
+- pandas
+- matplotlib-base
+- pydap
 # tests
 - pytest
