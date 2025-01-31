@@ -19,6 +19,7 @@ FORMAT_PNG = Format("image/png", extension=".png", encoding="base64")
 class Drought(Process):
     """A process to forecast precipitation."""
 
+
     def __init__(self):
         inputs = [
             LiteralInput(
@@ -62,7 +63,7 @@ class Drought(Process):
                 abstract='8',
                 default='8',
                 # keywords=['name', 'firstname'],
-                 data_type='string'),  # this is new added user defined parameter
+                data_type='string'),  # this is new added user defined parameter
         ]
         outputs = [
 
