@@ -96,11 +96,11 @@ class Drought(Process):
             ComplexOutput('scatter_plot', 'Scatter Plot',
                           # abstract='Plot of observations and predictions with a 1:1 line, accuracy and equation.',
                           as_reference=True,
-                          supported_formats=[ FORMAT_PNG ]),
+                          supported_formats=[FORMAT_PNG]),
             ComplexOutput('sst_map', 'SST Map',
                           # abstract='Plot of selected SST map',
                           as_reference=True,
-                          supported_formats=[ FORMAT_PNG ]),
+                          supported_formats=[FORMAT_PNG]),
         ]
 
         super(Drought, self).__init__(
@@ -128,7 +128,7 @@ class Drought(Process):
         LOGGER.info("get input parameter")
 
         ############################
-        ### original code https://github.com/mxgiuliani00/CSI/blob/master/NIPA/run_nipa.py
+        # original code https://github.com/mxgiuliani00/CSI/blob/master/NIPA/run_nipa.py
         LOGGER.info("start processing")
 
         ###########################
@@ -197,25 +197,25 @@ class Drought(Process):
         scatter_fp = './scatter_plots/%s' % (filename)
         sst_fig, sst_axes = plt.subplots(M, 1, figsize=(6, 12))
         scatter_fig, scatter_axes = plt.subplots(M, 1, figsize=(6, 12))
-        timeseries = {'years': [ ], 'data': [ ], 'hindcast': [ ]}
+        timeseries = {'years': [], 'data': [], 'hindcast': []}
         # pc1 = {'pc1':[]}
         # reg_stats = {'slope':[],'intercept':[]}
 
         LOGGER.info("NIPA running...")  # print('NIPA running...')
 
-        if M==1:
+        if M == 1:
             phase = 'allyears'
-            model = NIPAphase(climdata, sst, index, phaseind [ phase ])
+            model = NIPAphase(climdata, sst, index, phaseind[phase])
             model.phase = phase
-            model.years = years [ phaseind [ phase ] ]
+            model.years = years[phaseind[phase]]
             model.bootcorr(corrconf=0.95)
             model.gridCheck()
             model.crossvalpcr(xval=crv_flag)
-            timeseries [ 'years' ] = model.years
-            timeseries [ 'data' ] = model.clim_data
-            timeseries [ 'hindcast' ] = model.hindcast
-            LOGGER.info(timeseries [ 'years' ])
-            LOGGER.info(timeseries [ 'data' ])
+            timeseries['years'] = model.years
+            timeseries['data'] = model.clim_data
+            timeseries['hindcast'] = model.hindcast
+            LOGGER.info(timeseries['years'])
+            LOGGER.info(timeseries['data'])
 
             if sst_map_flag:
                 fig, axes, m = sstMap(model, fig=fig, ax=axes)
@@ -223,18 +223,17 @@ class Drought(Process):
                 fig.savefig(fp)
                 plt.close(fig)
 
-
         else:
             for phase, sst_ax, scatter_ax in zip(phaseind, sst_axes, scatter_axes):
-                model = NIPAphase(climdata, sst, index, phaseind [ phase ])
+                model = NIPAphase(climdata, sst, index, phaseind[phase])
                 model.phase = phase
-                model.years = years [ phaseind [ phase ] ]
+                model.years = years[phaseind[phase]]
                 model.bootcorr(corrconf=0.95)
                 model.gridCheck()
                 model.crossvalpcr(xval=crv_flag)
-                timeseries [ 'years' ].append(model.years)
-                timeseries [ 'data' ].append(model.clim_data)
-                timeseries [ 'hindcast' ].append(model.hindcast)
+                timeseries['years'].append(model.years)
+                timeseries['data'].append(model.clim_data)
+                timeseries['hindcast'].append(model.hindcast)
 
                 if sst_map_flag:
                     sst_fig, sst_ax, m = sstMap(model, fig=sst_fig, ax=sst_ax)
@@ -245,7 +244,7 @@ class Drought(Process):
                     # Add 1:1 line
                     min_val = min(min(model.clim_data), min(model.hindcast))
                     max_val = max(max(model.clim_data), max(model.hindcast))
-                    scatter_ax.plot([ min_val, max_val ], [ min_val, max_val ], 'r--',
+                    scatter_ax.plot([min_val, max_val], [min_val, max_val], 'r--',
                                     label='1:1 Line')  # Red dashed line
                     scatter_ax.set_title('%s, %.2f' % (phase, model.correlation))
                     scatter_ax.set_xlabel('observation')
@@ -265,26 +264,26 @@ class Drought(Process):
                 plt.close(scatter_fig)
 
         # save timeseries (exceptions handled only for 2 phase analysis)
-        if np.size(timeseries [ 'hindcast' ] [ 0 ])==1:
-            if math.isnan(timeseries [ 'hindcast' ] [ 0 ]):
+        if np.size(timeseries['hindcast'][0]) == 1:
+            if math.isnan(timeseries['hindcast'][0]):
                 # no result for the first phase -> consider only the second set of results
-                timeseries [ 'years' ] = timeseries [ 'years' ] [ 1 ]
-                timeseries [ 'data' ] = timeseries [ 'data' ] [ 1 ]
-                timeseries [ 'hindcast' ] = timeseries [ 'hindcast' ] [ 1 ]
+                timeseries['years'] = timeseries['years'][1]
+                timeseries['data'] = timeseries['data'][1]
+                timeseries['hindcast'] = timeseries['hindcast'][1]
                 # reg_stats['slope'] = reg_stats['slope'][1]
                 # reg_stats['intercept'] = reg_stats['intercept'][1]
 
-        elif np.size(timeseries [ 'hindcast' ] [ 1 ])==1:
-            if math.isnan(timeseries [ 'hindcast' ] [ 1 ]):
+        elif np.size(timeseries['hindcast'][1]) == 1:
+            if math.isnan(timeseries['hindcast'][1]):
                 # no result for the second phase -> consider only the first set of results
-                timeseries [ 'years' ] = timeseries [ 'years' ] [ 0 ]
-                timeseries [ 'data' ] = timeseries [ 'data' ] [ 0 ]
-                timeseries [ 'hindcast' ] = timeseries [ 'hindcast' ] [ 0 ]
+                timeseries['years'] = timeseries['years'][0]
+                timeseries['data'] = timeseries['data'][0]
+                timeseries['hindcast'] = timeseries['hindcast'][0]
 
         else:
-            timeseries [ 'years' ] = np.concatenate(timeseries [ 'years' ])
-            timeseries [ 'data' ] = np.concatenate(timeseries [ 'data' ])
-            timeseries [ 'hindcast' ] = np.concatenate(timeseries [ 'hindcast' ])
+            timeseries['years'] = np.concatenate(timeseries['years'])
+            timeseries['data'] = np.concatenate(timeseries['data'])
+            timeseries['hindcast'] = np.concatenate(timeseries['hindcast'])
 
         df_timeseries = pd.DataFrame(timeseries)
         ts_file = './%s_timeseries.csv' % (filename)
@@ -303,10 +302,8 @@ class Drought(Process):
 
         LOGGER.info('NIPA run completed')
 
-        response.outputs [ 'forecast_file' ].data = ts_file
-        response.outputs [ 'scatter_plot' ].data = scatter_fp
-        response.outputs [ 'sst_map' ].data = sst_fp
+        response.outputs['forecast_file'].data = ts_file
+        response.outputs['scatter_plot'].data = scatter_fp
+        response.outputs['sst_map'].data = sst_fp
 
         return response
-
-

@@ -7,6 +7,7 @@ LOGGER = logging.getLogger("PYWPS")
 
 class SayHello(Process):
     """A nice process saying 'hello'."""
+
     def __init__(self):
         inputs = [
             LiteralInput('name', 'Your name',
