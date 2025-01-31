@@ -102,7 +102,7 @@ class Drought(Process):
             status_supported=True
         )
 
-    @staticmethod
+    """@staticmethod
     def _handler(request, response):
 
         ############################
@@ -131,6 +131,8 @@ class Drought(Process):
         startyr = start_year  # beginning of the time period to analyze; from user input
         endyr = end_year  # end of the time period to analyze; from user input
         n_yrs = endyr - startyr + 1  # number of years to analyze
+        fp = './maps/%s' % (filename) # link to output file path
+        fig, axes = plt.subplots(M, 1, figsize=(6, 12))
 
         # Select the type of experiment:
         # crv_flag:
@@ -144,6 +146,54 @@ class Drought(Process):
         ####################
 
         # Don't mess with the next few lines
+        years = np.arange(startyr, startyr + n_yrs)"""
+
+    LOGGER = logging.getLogger(__name__)
+
+    def _handler(request, response):
+        ############################
+        LOGGER.info("get input parameter")
+        ############################
+        # Retrieve user inputs
+        try:
+            months = [ int(m) for m in request.inputs [ 'months' ].data ]  # Assuming a list of integers is passed
+            startyr = int(request.inputs [ 'start_year' ].data)
+            endyr = int(request.inputs [ 'end_year' ].data)
+        except KeyError as e:
+            LOGGER.error(f"Missing required input parameter: {e}")
+            response.status = "Failed"
+            return response
+
+        ###########################
+        LOGGER.info("start processing")
+        ###########################
+        LOGGER.info("Select the input-output files")
+
+        index_file = os.path.join(os.getcwd(), 'tests/DATA/nao.txt')
+        clim_file = os.path.join(os.getcwd(), 'tests/DATA/APGD_prcpComo.txt')
+        filename = 'testComoNAO'
+
+        # #### USER INPUT ####
+        LOGGER.info("configuration of the process")
+
+        # Settings:
+        M = 2  # number of climate signal's phases; fixed
+        n_obs = 3  # number of observations (months); fixed
+        lag = 3  # lag-time (months) --> 3 = seasonal; fixed
+        n_yrs = endyr - startyr + 1  # number of years to analyze
+        fp = f'./maps/{filename}'  # link to output file path
+        if not os.path.exists(fp):
+            os.makedirs(fp)
+
+        fig, axes = plt.subplots(M, 1, figsize=(6, 12))
+
+        # Select the type of experiment:
+        crv_flag = True
+        sst_map_flag = True
+        scatter_plot_flag = True
+
+        ####################
+        # Processing
         years = np.arange(startyr, startyr + n_yrs)
 
         kwgroups = create_kwgroups(debug=True, climdata_months=months,
