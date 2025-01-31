@@ -25,6 +25,7 @@ def plot_timeseries(timeseries, fp):
     plt.savefig(fp + '_timeseries')
     return
 
+
 def make_scatterplot(model, fp):
     plt.scatter(model.clim_data, model.hindcast)
     plt.title('%s, %.2f' % (model.phase, model.correlation))

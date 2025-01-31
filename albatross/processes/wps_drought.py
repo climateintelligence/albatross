@@ -9,7 +9,7 @@ from pywps import ComplexOutput, Format, LiteralInput, LiteralOutput, Process
 from pywps.app.Common import Metadata
 
 # drought specific functions
-from albatross.climdiv_data import get_data,create_kwgroups
+from albatross.climdiv_data import get_data, create_kwgroups
 from albatross.new_simpleNIPA import NIPAphase
 from albatross.utils import sstMap
 
@@ -106,14 +106,11 @@ class Drought(Process):
 
         ############################
         LOGGER.info("get input parameter")
-
         ############################
         # original code https://github.com/mxgiuliani00/CSI/blob/master/NIPA/run_nipa.py
         LOGGER.info("start processing")
-
         ###########################
         LOGGER.info("Select the input-output files")
-
 
         import os
         os.getcwd()
