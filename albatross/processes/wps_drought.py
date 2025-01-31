@@ -3,6 +3,7 @@ import math
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 
 from pywps import ComplexOutput, Format, LiteralInput, LiteralOutput, Process
@@ -156,9 +157,9 @@ class Drought(Process):
         ############################
         # Retrieve user inputs
         try:
-            months = [ int(m) for m in request.inputs [ 'months' ].data ]  # Assuming a list of integers is passed
-            startyr = int(request.inputs [ 'start_year' ].data)
-            endyr = int(request.inputs [ 'end_year' ].data)
+            months = [int(m) for m in request.inputs['months'].data]  # Assuming a list of integers is passed
+            startyr = int(request.inputs['start_year'].data)
+            endyr = int(request.inputs['end_year'].data)
         except KeyError as e:
             LOGGER.error(f"Missing required input parameter: {e}")
             response.status = "Failed"
