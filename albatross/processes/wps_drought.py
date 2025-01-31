@@ -16,9 +16,9 @@ from albatross.utils import sstMap
 LOGGER = logging.getLogger("PYWPS")
 FORMAT_PNG = Format("image/png", extension=".png", encoding="base64")
 
+
 class Drought(Process):
     """A process to forecast precipitation."""
-
 
     def __init__(self):
         inputs = [
