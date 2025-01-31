@@ -1,4 +1,4 @@
-from pywps import Process, LiteralInput, LiteralOutput
+from pywps import LiteralInput, LiteralOutput, Process
 from pywps.app.Common import Metadata
 from pywps.ext_autodoc import MetadataUrl
 

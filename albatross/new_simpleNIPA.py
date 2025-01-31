@@ -3,11 +3,11 @@
 New NIPA module
 """
 
-from os import environ as EV
-import os
-import pandas as pd
-import numpy as np
 from collections import namedtuple
+
+import numpy as np
+import pandas as pd
+
 seasonal_var = namedtuple('seasonal_var', ('data', 'lat', 'lon'))
 
 
@@ -39,13 +39,12 @@ class NIPAphase(object):
 
         """
         sst is a named tuple
-
         """
         return
 
     def categorize(self, ncat=3, hindcast=False):
-        from pandas import Series
         from numpy import sort
+        from pandas import Series
 
         if hindcast:
             data = self.hindcast.copy()
@@ -73,8 +72,9 @@ class NIPAphase(object):
 
     def bootcorr(self, ntim=1000, corrconf=0.95, bootconf=0.80,
                  debug=False, quick=True):
-        from numpy import meshgrid, zeros, ma, isnan, linspace
-        from albatross.utils import vcorr, sig_test
+        from numpy import isnan, ma
+
+        from albatross.utils import sig_test, vcorr
 
         corrlevel = 1 - corrconf
 
@@ -105,15 +105,14 @@ class NIPAphase(object):
             else:
                 self.flags['noSST'] = False
             return
-        ###INITIALIZE A NEW CORR GRID####
 
+        # INITIALIZE A NEW CORR GRID####
         count = np.zeros((nlat, nlon))
-
         dat = clim_data.copy()
 
-        for boot in xrange(ntim):
+        for boot in range(ntim):
 
-            ###SHUFFLE THE YEARS AND CREATE THE BOOT DATA###
+            # SHUFFLE THE YEARS AND CREATE THE BOOT DATA
             idx = np.random.randint(0, len(dat) - 1, len(dat))
             boot_fieldData = np.zeros((len(idx), nlat, nlon))
             boot_fieldData[:] = fieldData[idx]
@@ -173,16 +172,16 @@ class NIPAphase(object):
         # Must set phase with bootcorr, and then use crossvalpcr, as it just uses the corr_grid attribute
         import numpy as np
         from numpy import array
-        from scipy.stats import pearsonr as corr
         from scipy.stats import linregress
-        from matplotlib import pyplot as plt
+        from scipy.stats import pearsonr as corr
+
         from albatross.utils import weightsst
         predictand = self.clim_data
 
         if self.corr_grid.mask.sum() >= len(self.sst.lat) * len(self.sst.lon) - 4:
             yhat = np.nan
             e = np.nan
-            #index = self.clim_data.index
+            # index = self.clim_data.index
             index = self.mei
             hindcast = pd.Series(data=yhat, index=index)
             error = pd.Series(data=e, index=index)
@@ -193,7 +192,7 @@ class NIPAphase(object):
             return
 
         self.flags['noSST'] = False
-        sstidx = self.corr_grid.mask == False
+        sstidx = ~self.corr_grid.mask
         n = len(predictand)
         yhat = np.zeros(n)
         e = np.zeros(n)
@@ -230,7 +229,7 @@ class NIPAphase(object):
             rawdata = rawSSTdata[:, sstidx]
             dropped_data = droppedSSTdata[:, sstidx].squeeze()
 
-            #U, s, V = np.linalg.svd(rawdata)
+            # U, s, V = np.linalg.svd(rawdata)
             # pc_1 = V[0,:] #_Rows of V are principal components
             # eof_1 = U[:,0].squeeze() #_Columns are EOFS
             # EIGs = s**2 #_s is square root of eigenvalues
@@ -272,8 +271,8 @@ class NIPAphase(object):
     def genEnsemble(self):
         from numpy import zeros
         from numpy.random import randint
-        sd = self.hindcast_error.std()
-        mn = self.hindcast_error.mean()
+        self.hindcast_error.std()
+        self.hindcast_error.mean()
         n = len(self.hindcast)
         ensemble = zeros((1000, n))
         for i in range(n):
@@ -286,6 +285,12 @@ class NIPAphase(object):
     def simple_skillscores(self):
         n = len(self.clim_data)
         lower_ind = n / 3
-        upper_ind = (2 * n / 3)
-
+        # upper_ind = (2 * n / 3)
         maxima = max(self.clim_data[:lower_ind])
+        minima = min(self.clim_data[:lower_ind])
+        spread = maxima - minima
+        self.spread = spread
+        self.bias = self.hindcast.mean() - self.clim_data.mean()
+        self.rmse = np.sqrt(((self.hindcast - self.clim_data) ** 2).mean())
+        self.rmsespread = self.rmse / spread
+        return

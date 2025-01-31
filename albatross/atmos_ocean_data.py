@@ -3,12 +3,10 @@
 Module for loading atmospheric and oceanic data necessary to run NIPA
 """
 
+import logging
 import os
 from os import environ as EV
-import sys
-import resource
 
-import logging
 LOGGER = logging.getLogger("PYWPS")
 
 
@@ -17,29 +15,22 @@ def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
     This function downloads data from the new ERSSTv3b on the IRI data library
     kwargs should contain: startyr, endyr, startmon, endmon, nbox
     """
-    from albatross.utils import int_to_month
-    from os.path import isfile
-    # from xarray import open_dataset
-    from pydap.client import open_url
-    from numpy import arange
-    from numpy import squeeze
     import pickle
     import re
     from collections import namedtuple
 
+    from numpy import arange
+    from pydap.client import open_url
+
+    from albatross.utils import int_to_month
+
     # getting NOAA raw data
     SSTurl = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCDC/.ERSST/.version' + version + '/' + \
         '.anom/T/%28startmon%20startyr%29%28endmon%20endyr%29RANGEEDGES/T/nbox/0.0/boxAverage/dods'
-    # SSTurl = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP-NCAR/.CDAS-1/.MONTHLY/.Intrinsic/.PressureLevel/.phi/P/%28700%29VALUES' +'/' + \
-    # '.anom/T/%28startmon%20startyr%29%28endmon%20endyr%29RANGEEDGES/T/nbox/0.0/boxAverage/dods'
-    # SSTurl = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCDC/.ERSST/.version' + version + '/' + \
-    # '.anom/T/%28startmon%20startyr%29%28endmon%20endyr%29RANGEEDGES/T/nbox/0.0/boxAverage/data.nc'
 
     if not anomalies:
         SSTurl = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCDC/.ERSST/.version' + version + '/' + \
             '.sst/T/%28startmon%20startyr%29%28endmon%20endyr%29RANGEEDGES/T/nbox/0.0/boxAverage/dods'
-        # SSTurl = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCEP-NCAR/.CDAS-1/.MONTHLY/.Intrinsic/.PressureLevel/.phi/P/%28700%29VALUES' +'/' + \
-    # '.anom/T/%28startmon%20startyr%29%28endmon%20endyr%29RANGEEDGES/T/nbox/0.0/boxAverage/dods'
 
     LOGGER.info('Preparing to download from %s' % (SSTurl))
 
@@ -61,19 +52,6 @@ def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
     print('Path for temporary file:  %s' % (fp))
 
     seasonal_var = namedtuple('seasonal_var', ('data', 'lat', 'lon'))
-
-    # if isfile(fp):
-    # print 'file found'
-    # sys.setrecursionlimit(15000)
-    # print sys.getrecursionlimit()
-    # stupid edit: remove file
-    # os.remove(fp)
-    #if debug: LOGGER.info('Using pickled SST')
-    #f = open(fp,'rb')
-    #sstdata = pickle.load(f)
-    # f.close()
-    #var = seasonal_var(sstdata['grid'], sstdata['lat'], sstdata['lon'])
-    # return var
 
     LOGGER.info('New SST field, will save to %s' % fp)
     LOGGER.info(SSTurl)
@@ -114,17 +92,19 @@ def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
     return var
 
 
-def load_slp(newFormat=False, debug=False, anomalies=True, **kwargs):
+def load_slp(newFormat=False, debug=False, **kwargs):
     """
     This function loads HADSLP2r data.
     """
-    from albatross.utils import slp_tf, int_to_month
-    from netCDF4 import Dataset
-    from sklearn.preprocessing import scale
-    from numpy import arange, zeros, where
-    from os.path import isfile
-    import pandas as pd
     import pickle
+    from os.path import isfile
+
+    import pandas as pd
+    from netCDF4 import Dataset
+    from numpy import arange, where, zeros
+    from sklearn.preprocessing import scale
+
+    from albatross.utils import int_to_month, slp_tf
 
     transform = slp_tf()  # This is for transforming kwargs into DLargs
 
@@ -189,7 +169,7 @@ def load_slp(newFormat=False, debug=False, anomalies=True, **kwargs):
 
     nlat = len(lat)
     nlon = len(lon)
-    time = tiindexndex[idx]
+    tiindexndex[idx]
     slpavg = zeros((kwargs['n_year'], nlat, nlon))
 
     for year, mons in enumerate(idx):
@@ -231,12 +211,12 @@ def load_clim_file(fp, debug=False):
     f = open(fp)
     description = f.readline()
     years = f.readline()
-    startyr, endyr = years[:4], years[5:9]
+    startyr, _ = years[:4], years[5:9]
     LOGGER.info(description)
 
     # First load extended index
     data = np.loadtxt(fp, skiprows=2)
-    nyrs = data.shape[0]
+    data.shape[0]
     data = data.reshape(data.size)  # Make data 1D
     timeargs = {'start': startyr + '-01',
                 'periods': len(data),
@@ -250,7 +230,8 @@ def load_clim_file(fp, debug=False):
 def load_climdata(**kwargs):
 
     data = load_clim_file(kwargs['fp'])
-    from numpy import where, arange, zeros, inf
+    from numpy import arange, where, zeros
+
     from albatross.utils import slp_tf
     tran = slp_tf()
     startmon = int(tran[kwargs['months'][0]])
@@ -258,11 +239,6 @@ def load_climdata(**kwargs):
     idx_start = where((data.index.year == startyr) & (data.index.month == startmon))
     idx = []
     [idx.extend(arange(len(kwargs['months'])) + idx_start + 12 * n) for n in range(kwargs['n_year'])]
-    # print len(idx)
-    # print kwargs['n_year']
-    # if kwargs['months'][-1]>12: # period extends across 2 years
-    #del idx[-1]
-    # print len(idx)
     climdata = zeros((kwargs['n_year']))
     for year, mons in enumerate(idx):
         climdata[year] = data.values[mons].mean()
@@ -273,7 +249,8 @@ def create_phase_index(debug=False, **kwargs):
     # kwargs = kwgroups['index']
     from numpy import sort
     index = load_clim_file(kwargs['fp'])
-    from numpy import where, arange, zeros, inf
+    from numpy import arange, inf, where, zeros
+
     from albatross.utils import slp_tf
     tran = slp_tf()
     startmon = int(tran[kwargs['months'][0]])
@@ -291,7 +268,7 @@ def create_phase_index(debug=False, **kwargs):
     n_el = int(round(len(pos) * 0.34))
     n_la = int(round(len(neg) * 0.34))
     n_np = int(len(pos) - n_el)
-    n_nn = int(len(neg) - n_la)
+    int(len(neg) - n_la)
 
     cutoffs = {
         'la': (neg[0], neg[n_la - 1]),
@@ -320,10 +297,11 @@ def create_phase_index(debug=False, **kwargs):
 
 def create_phase_index2(**kwargs):
     from copy import deepcopy
+
     import numpy as np
-    from numpy import sort
     index = load_clim_file(kwargs['fp'])
-    from numpy import where, arange, zeros, inf
+    from numpy import arange, where, zeros
+
     from albatross.utils import slp_tf
     tran = slp_tf()
     startmon = int(tran[kwargs['months'][0]])
@@ -413,5 +391,4 @@ def create_phase_index2(**kwargs):
         phaseind['neutpos'] = p4
         p5[idx[x4:]] = True
         phaseind['pos'] = p5
-    # if nphase == 6:
     return index_avg, phaseind

@@ -2,10 +2,10 @@
 """
 Module containing utility functions for running NIPA.
 """
-from matplotlib import cm, pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-
 import numpy as np
+from matplotlib import cm
+from matplotlib import pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 def plot_timeseries(timeseries, fp):
@@ -24,7 +24,6 @@ def plot_timeseries(timeseries, fp):
     plt.legend()
     plt.savefig(fp + '_timeseries')
     return
-
 
 def make_scatterplot(model, fp):
     plt.scatter(model.clim_data, model.hindcast)
@@ -138,8 +137,8 @@ def slp_tf():
 def meteo_swiss_convert(f_in, f_out):
     data = np.loadtxt(f_in, skiprows=28)
     years = data[:, 0]
-    months = data[:, 1]
-    temp = data[:, 2]
+    # months = data[:, 1]
+    # temp = data[:, 2]
     prcp = data[:, 3]
     startyr = years[0]
     endyr = years[-1]

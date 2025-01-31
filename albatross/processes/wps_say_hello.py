@@ -1,7 +1,8 @@
-from pywps import Process, LiteralInput, LiteralOutput, UOM
+import logging
+
+from pywps import UOM, LiteralInput, LiteralOutput, Process
 from pywps.app.Common import Metadata
 
-import logging
 LOGGER = logging.getLogger("PYWPS")
 
 

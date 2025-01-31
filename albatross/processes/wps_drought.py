@@ -1,103 +1,83 @@
-from pywps import Process, LiteralInput, LiteralOutput, ComplexOutput
-from pywps import FORMATS, Format
+import logging
+import math
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+from pywps import ComplexOutput, Format, LiteralInput, LiteralOutput, Process
 from pywps.app.Common import Metadata
 
-# general
-import pandas as pd
-from matplotlib import cm, pyplot as plt
-import matplotlib as mpl
-import numpy as np
-import pydap.client
-import mpl_toolkits
-import csv
-import math
-
 # drought specific functions
-from albatross.climdiv_data import *
-from albatross.new_simpleNIPA import *
-import albatross.atmos_ocean_data
-# from albatross.atmos_ocean_data import *
+from albatross.climdiv_data import get_data,create_kwgroups
+from albatross.new_simpleNIPA import NIPAphase
 from albatross.utils import sstMap
-from albatross.utils import *
-from albatross import utils
-
-import logging
 
 LOGGER = logging.getLogger("PYWPS")
-
 FORMAT_PNG = Format("image/png", extension=".png", encoding="base64")
-
 
 class Drought(Process):
     """A process to forecast precipitation."""
 
     def __init__(self):
         inputs = [
-            LiteralInput('pr', 'Monthly global precipitation file',
-                         abstract='text file of precipitation',
-                         # keywords=['name', 'firstname'],
-                         default='https://raw.githubusercontent.com/mxgiuliani00/CSI/master/NIPA/DATA/APGD_prcpComo.txt',
-                         data_type='string'),
-            # LiteralInput('sst', 'Monthly global sea surface temperature file',
-            #              abstract='text file of Sea surface temperature',
-            #              # keywords=['name', 'firstname'],
-            #              data_type='string'),
-            #           LiteralInput('gph', 'Monthly global geopotential height file',
-            #                        abstract='??? netcdf file',
-            #                        # keywords=['name', 'firstname'],
-            #                        data_type='string'),
-            #           LiteralInput('slp', 'Monthly global sea level pressure file',
-            #                        abstract='??? netcdf file',
-            #                        # keywords=['name', 'firstname'],
-            #                        data_type='string'),
-            LiteralInput('indicator', 'NAO Indicator ',
-                         abstract='examples: climate indicator of tele-connection patterns',
-                         # keywords=['name', 'firstname'],
-                         default='https://raw.githubusercontent.com/mxgiuliani00/CSI/master/NIPA/DATA/nao.txt',
-                         data_type='string'),
-            LiteralInput('start_year', 'Start Year',
-                         abstract='2020',
-                         # keywords=['name', 'firstname'],
-                         default='2020',
-                         data_type='string'),
-            LiteralInput('end_year', 'End Year',
-                         abstract='2022',
-                         default='2022',
-                         # keywords=['name', 'firstname'],
-                         data_type='string'),  # this is new added user defined parameter
-            # LiteralInput('bbox', 'Bounding Box',
-            #              abstract='bbox or other geometries',
-            #              # keywords=['name', 'firstname'],
-            #              data_type='string',
-            #              default = '20,30,40,50',) # is this needed?
-            LiteralInput('month', 'Forecasted Month',
-                         abstract='8',
-                         default='8',
-                         # keywords=['name', 'firstname'],
-                         data_type='string'),  # this is new added user defined parameter
+            LiteralInput(
+                'pr',
+                'Monthly global precipitation file',
+                abstract='text file of precipitation',
+                # keywords=['name', 'firstname'],
+                default=(
+                    "https://raw.githubusercontent.com/mxgiuliani00/CSI/master/"
+                    "NIPA/DATA/APGD_prcpComo.txt"
+                ),
+                data_type='string'
+            ),
+
+            LiteralInput(
+                'indicator',
+                'NAO Indicator ',
+                abstract='examples: climate indicator of tele-connection patterns',
+                # keywords=['name', 'firstname'],
+                default=(
+                    "https://raw.githubusercontent.com/mxgiuliani00/CSI/master/NIPA/DATA/nao.txt"
+                ),
+                data_type='string'),
+            LiteralInput(
+                'start_year',
+                'Start Year',
+                abstract='2020',
+                # keywords=['name', 'firstname'],
+                default='2020',
+                data_type='string'),
+            LiteralInput(
+                'end_year',
+                'End Year',
+                abstract='2022',
+                default='2022',
+                data_type='string'),  # this is new added user defined parameter
+
+            LiteralInput(
+                'month',
+                'Forecasted Month',
+                abstract='8',
+                default='8',
+                # keywords=['name', 'firstname'],
+                 data_type='string'),  # this is new added user defined parameter
         ]
         outputs = [
-            # LiteralOutput('negative_list', 'Negative List ...',
-            #               # abstract='negativ list',
-            #               # keywords=['output', 'result', 'response'],
-            #               data_type='string'),
-            # LiteralOutput('positive_list', 'Postive List ...',
-            #               # abstract='negativ list',
-            #               # keywords=['output', 'result', 'response'],
-            #               data_type='string'),
-            # LiteralOutput('pc_file', 'PC File ',
-            #               # abstract='negativ list',
-            #               # keywords=['output', 'result', 'response'],
-            #               data_type='string'), # is this needed?
-            LiteralOutput('forecast_file', 'Forecast File ',
+
+            LiteralOutput('forecast_file',
+                          'Forecast File ',
                           # abstract='negativ list',
                           # keywords=['output', 'result', 'response'],
                           data_type='string'),
-            ComplexOutput('scatter_plot', 'Scatter Plot',
+            ComplexOutput('scatter_plot',
+                          'Scatter Plot',
                           # abstract='Plot of observations and predictions with a 1:1 line, accuracy and equation.',
                           as_reference=True,
                           supported_formats=[FORMAT_PNG]),
-            ComplexOutput('sst_map', 'SST Map',
+            ComplexOutput('sst_map',
+                          'SST Map',
                           # abstract='Plot of selected SST map',
                           as_reference=True,
                           supported_formats=[FORMAT_PNG]),
@@ -134,23 +114,7 @@ class Drought(Process):
         ###########################
         LOGGER.info("Select the input-output files")
 
-        #        sst= request.inputs['sst'][0].data
 
-        # import shutil
-        # import tempfile
-        # import urllib.request
-
-        # with urllib.request.urlopen(request.inputs['indicator'][0].data) as response:
-        #     with tempfile.NamedTemporaryFile(delete=False) as tmp_indicator:
-        #         shutil.copyfileobj(response, tmp_indicator)
-        # with open(tmp_indicator.name) as index_file:
-        #     pass
-
-        # with urllib.request.urlopen(request.inputs['pr'][0].data) as response:
-        #     with tempfile.NamedTemporaryFile(delete=False) as tmp_pr:
-        #         shutil.copyfileobj(response, tmp_pr)
-        # with open(tmp_pr.name) as clim_file:
-        #     pass
         import os
         os.getcwd()
 

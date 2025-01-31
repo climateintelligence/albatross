@@ -3,10 +3,8 @@
 Module for loading climate division data for running NIPA
 """
 
-import os
-from albatross.atmos_ocean_data import *
+from albatross.atmos_ocean_data import create_phase_index2, load_climdata, openDAPsst
 from albatross.utils import int_to_month
-from os import environ as EV
 
 
 def get_data(kwgroups):
@@ -22,11 +20,10 @@ def create_kwgroups(debug=False, climdata_startyr=1871, n_yrs=145,
                     index_fp='mei.txt', climdata_fp='APGD_prcp.txt'):
     print(climdata_months)
     """
-	This function takes information about the seasons, years, and type of divisional
-	data to look at, and creates appropriate kwgroups (parameters) to be input into
-	data loading and openDap modules.
-	"""
-
+    This function takes information about the seasons, years, and type of divisional
+    data to look at, and creates appropriate kwgroups (parameters) to be input into
+    data loading and openDap modules.
+    """
     # _Check a few things
     assert climdata_months[0] >= 1, 'Divisonal data can only wrap to the following year'
     assert climdata_months[-1] <= 15, 'DJFM (i.e. [12, 13, 14, 15]) is the biggest wrap allowed'
