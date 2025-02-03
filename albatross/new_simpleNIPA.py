@@ -113,7 +113,7 @@ class NIPAphase(object):
             idx = np.random.randint(0, len(dat) - 1, len(dat))
             boot_fieldData = np.zeros((len(idx), nlat, nlon))
             boot_fieldData[:] = fieldData[idx]
-            boot_climData = np.zeros((len(idx)))
+            # boot_climData = np.zeros((len(idx)))
             boot_climData = dat[idx]
 
             boot_corr_grid = vcorr(X=boot_fieldData, y=boot_climData)
@@ -195,7 +195,8 @@ class NIPAphase(object):
         e = np.zeros(n)
         idx = np.arange(n)
 
-        params = []
+        slopes = []
+        intercepts = []
         std_errs = []
         p_vals = []
         t_vals = []
@@ -204,9 +205,9 @@ class NIPAphase(object):
             rawdata = rawSSTdata[:, sstidx]
             cvr = np.cov(rawdata.T)
             eigval, eigvec = np.linalg.eig(cvr)
-            eigvalsort = np.argsort(eigval)[::-1]
-            eigval = eigval[eigvalsort]
-            eigval = np.real(eigval)
+            # eigvalsort = np.argsort(eigval)[::-1]
+            # eigval = eigval[eigvalsort]
+            # eigval = np.real(eigval)
             ncomp = 1
             eof_1 = eigvec[
                 :, :ncomp
@@ -236,9 +237,9 @@ class NIPAphase(object):
             cvr = np.cov(rawdata.T)
             # print cvr.shape
             eigval, eigvec = np.linalg.eig(cvr)
-            eigvalsort = np.argsort(eigval)[::-1]
-            eigval = eigval[eigvalsort]
-            eigval = np.real(eigval)
+            # eigvalsort = np.argsort(eigval)[::-1]
+            # eigval = eigval[eigvalsort]
+            # eigval = np.real(eigval)
             ncomp = 1
             eof_1 = eigvec[
                 :, :ncomp
@@ -265,10 +266,10 @@ class NIPAphase(object):
         self.hindcast = hindcast
         self.hindcast_error = error
         self.correlation = round(r, 2)
-        self.reg_stats = {'params': array(params),
-                          'std_errs': array(std_errs),
-                          't_vals': array(t_vals),
-                          'p_vals': array(p_vals)}
+        # self.reg_stats = {'params': array(params),
+        #                  'std_errs': array(std_errs),
+        #                  't_vals': array(t_vals),
+        #                  'p_vals': array(p_vals)}
 
         return
 
