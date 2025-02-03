@@ -8,7 +8,7 @@ from collections import namedtuple
 import numpy as np
 import pandas as pd
 
-seasonal_var = namedtuple('seasonal_var', ('data', 'lat', 'lon'))
+seasonal_var = namedtuple("seasonal_var", ("data", "lat", "lon"))
 
 
 class NIPAphase(object):
@@ -37,9 +37,6 @@ class NIPAphase(object):
         self.mei = mei[phaseind]
         self.flags = {}
 
-        """
-        sst is a named tuple
-        """
         return
 
     def categorize(self, ncat=3, hindcast=False):
@@ -59,22 +56,22 @@ class NIPAphase(object):
 
         for year in data.index:
             if data[year] <= lower:
-                cat_dat[year] = 'B'
+                cat_dat[year] = "B"
             elif data[year] > upper:
-                cat_dat[year] = 'A'
+                cat_dat[year] = "A"
             else:
-                cat_dat[year] = 'N'
+                cat_dat[year] = "N"
         if hindcast:
             self.hcat = cat_dat
         else:
             self.cat = cat_dat
         return
 
-    def bootcorr(self, ntim=1000, corrconf=0.95, bootconf=0.80,
-                 debug=False, quick=True):
+    def bootcorr(
+        self, ntim=1000, corrconf=0.95, bootconf=0.80, debug=False, quick=True
+    ):
         from numpy import isnan, ma
-
-        from albatross.utils import sig_test, vcorr
+        from utils import sig_test, vcorr
 
         corrlevel = 1 - corrconf
 
@@ -101,18 +98,18 @@ class NIPAphase(object):
             self.corr_grid = corr_grid
             self.n_pre_grid = nlat * nlon - corr_grid.mask.sum()
             if self.n_pre_grid == 0:
-                self.flags['noSST'] = True
+                self.flags["noSST"] = True
             else:
-                self.flags['noSST'] = False
+                self.flags["noSST"] = False
             return
 
-        # INITIALIZE A NEW CORR GRID####
+        # INITIALIZE A NEW CORR GRID
         count = np.zeros((nlat, nlon))
+
         dat = clim_data.copy()
 
         for boot in range(ntim):
-
-            # SHUFFLE THE YEARS AND CREATE THE BOOT DATA
+            # SHUFFLE THE YEARS AND CREATE THE BOOT DATA###
             idx = np.random.randint(0, len(dat) - 1, len(dat))
             boot_fieldData = np.zeros((len(idx), nlat, nlon))
             boot_fieldData[:] = fieldData[idx]
@@ -125,7 +122,7 @@ class NIPAphase(object):
 
             count[p_value <= corrlevel] += 1
             if debug:
-                print('Count max is %i' % count.max())
+                print("Count max is %i" % count.max())
 
         # CREATE MASKED ARRAY USING THE COUNT AND BOOTCONF ATTRIBUTES
         corr_grid = np.ma.masked_array(corr_grid, count < bootconf * ntim)
@@ -133,9 +130,9 @@ class NIPAphase(object):
         self.corr_grid = corr_grid
         self.n_pre_grid = nlat * nlon - corr_grid.mask.sum()
         if self.n_pre_grid == 0:
-            self.flags['noSST'] = True
+            self.flags["noSST"] = True
         else:
-            self.flags['noSST'] = False
+            self.flags["noSST"] = False
         return
 
     def gridCheck(self, lim=5, ntim=2, debug=False):
@@ -161,7 +158,7 @@ class NIPAphase(object):
                             dat[i, j] = True
                             count += 1
             if debug:
-                print('Deleted %i grids' % count)
+                print("Deleted %i grids" % count)
 
             self.corr_grid.mask = dat
             self.n_post_grid = dat.size - dat.sum()
@@ -174,8 +171,8 @@ class NIPAphase(object):
         from numpy import array
         from scipy.stats import linregress
         from scipy.stats import pearsonr as corr
+        from utils import weightsst
 
-        from albatross.utils import weightsst
         predictand = self.clim_data
 
         if self.corr_grid.mask.sum() >= len(self.sst.lat) * len(self.sst.lon) - 4:
@@ -188,17 +185,19 @@ class NIPAphase(object):
             self.correlation = np.nan
             self.hindcast = np.nan
             self.hindcast_error = np.nan
-            self.flags['noSST'] = True
+            self.flags["noSST"] = True
             return
 
-        self.flags['noSST'] = False
+        self.flags["noSST"] = False
         sstidx = ~self.corr_grid.mask
         n = len(predictand)
         yhat = np.zeros(n)
         e = np.zeros(n)
         idx = np.arange(n)
 
-        params = []
+        # params = []
+        slopes = []
+        intercepts = []
         std_errs = []
         p_vals = []
         t_vals = []
@@ -211,7 +210,9 @@ class NIPAphase(object):
             eigval = eigval[eigvalsort]
             eigval = np.real(eigval)
             ncomp = 1
-            eof_1 = eigvec[:, :ncomp]  # _fv stands for Feature Vector, in this case EOF-1
+            eof_1 = eigvec[
+                :, :ncomp
+            ]  # _fv stands for Feature Vector, in this case EOF-1
             eof_1 = np.real(eof_1)
             pc_1 = eof_1.T.dot(rawdata.T).squeeze()
             slope, intercept, r, p, err = linregress(pc_1, predictand)
@@ -226,7 +227,7 @@ class NIPAphase(object):
             train = idx != i
             rawSSTdata = weightsst(self.sst).data[train]
             droppedSSTdata = weightsst(self.sst).data[test]
-            rawdata = rawSSTdata[:, sstidx]
+            rawdata = rawSSTdata[:, sstidx]  #
             dropped_data = droppedSSTdata[:, sstidx].squeeze()
 
             # U, s, V = np.linalg.svd(rawdata)
@@ -241,15 +242,20 @@ class NIPAphase(object):
             eigval = eigval[eigvalsort]
             eigval = np.real(eigval)
             ncomp = 1
-            eof_1 = eigvec[:, :ncomp]  # _fv stands for Feature Vector, in this case EOF-1
+            eof_1 = eigvec[
+                :, :ncomp
+            ]  # _fv stands for Feature Vector, in this case EOF-1
             eof_1 = np.real(eof_1)
             pc_1 = eof_1.T.dot(rawdata.T).squeeze()
 
-            slope, intercept, r_value, p_value, std_err = linregress(pc_1, predictand[train])
+            slope, intercept, r_value, p_value, std_err = linregress(
+                pc_1, predictand[train]
+            )
             predictor = dropped_data.dot(eof_1)
             yhat[i] = slope * predictor + intercept
             e[i] = predictand[i] - yhat[i]
-            params.append(slope)
+            slopes.append(slope)
+            intercepts.append(intercept)
             std_errs.append(std_err)
             p_vals.append(p_value)
             t_vals.append(slope / std_err)
@@ -261,18 +267,21 @@ class NIPAphase(object):
         self.hindcast = hindcast
         self.hindcast_error = error
         self.correlation = round(r, 2)
-        self.reg_stats = {'params': array(params),
-                          'std_errs': array(std_errs),
-                          't_vals': array(t_vals),
-                          'p_vals': array(p_vals)}
+        self.slope = array(slopes)
+        self.intercept = array(intercepts)
+        # self.reg_stats = {    'params' : array(params),
+        #                     'std_errs' : array(std_errs),
+        #                     't_vals' : array(t_vals),
+        #                     'p_vals' : array(p_vals)}
 
         return
 
     def genEnsemble(self):
         from numpy import zeros
         from numpy.random import randint
-        self.hindcast_error.std()
-        self.hindcast_error.mean()
+
+        # sd = self.hindcast_error.std()
+        # mn = self.hindcast_error.mean()
         n = len(self.hindcast)
         ensemble = zeros((1000, n))
         for i in range(n):
@@ -282,15 +291,9 @@ class NIPAphase(object):
         self.ensemble = ensemble
         return
 
-    def simple_skillscores(self):
-        n = len(self.clim_data)
-        lower_ind = n / 3
-        # upper_ind = (2 * n / 3)
-        maxima = max(self.clim_data[:lower_ind])
-        minima = min(self.clim_data[:lower_ind])
-        spread = maxima - minima
-        self.spread = spread
-        self.bias = self.hindcast.mean() - self.clim_data.mean()
-        self.rmse = np.sqrt(((self.hindcast - self.clim_data) ** 2).mean())
-        self.rmsespread = self.rmse / spread
-        return
+    # def simple_skillscores(self):
+        # n = len(self.clim_data)
+        # lower_ind = n / 3
+        # upper_ind = 2 * n / 3
+
+        # maxima = max(self.clim_data[:lower_ind])
