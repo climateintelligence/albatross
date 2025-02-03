@@ -195,9 +195,7 @@ class NIPAphase(object):
         e = np.zeros(n)
         idx = np.arange(n)
 
-        # params = []
-        slopes = []
-        intercepts = []
+        params = []
         std_errs = []
         p_vals = []
         t_vals = []
@@ -267,12 +265,10 @@ class NIPAphase(object):
         self.hindcast = hindcast
         self.hindcast_error = error
         self.correlation = round(r, 2)
-        self.slope = array(slopes)
-        self.intercept = array(intercepts)
-        # self.reg_stats = {    'params' : array(params),
-        #                     'std_errs' : array(std_errs),
-        #                     't_vals' : array(t_vals),
-        #                     'p_vals' : array(p_vals)}
+        self.reg_stats = {'params': array(params),
+                          'std_errs': array(std_errs),
+                          't_vals': array(t_vals),
+                          'p_vals': array(p_vals)}
 
         return
 
