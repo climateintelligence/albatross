@@ -168,7 +168,6 @@ class NIPAphase(object):
     def crossvalpcr(self, xval=True, debug=False):
         # Must set phase with bootcorr, and then use crossvalpcr, as it just uses the corr_grid attribute
         import numpy as np
-        from numpy import array
         from scipy.stats import linregress
         from scipy.stats import pearsonr as corr
         from utils import weightsst
