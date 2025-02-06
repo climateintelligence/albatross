@@ -103,54 +103,11 @@ class Drought(Process):
             status_supported=True
         )
 
-    """@staticmethod
-    def _handler(request, response):
 
-        ############################
-        LOGGER.info("get input parameter")
-        ############################
-        # original code https://github.com/mxgiuliani00/CSI/blob/master/NIPA/run_nipa.py
-        LOGGER.info("start processing")
-        ###########################
-        LOGGER.info("Select the input-output files")
-
-        import os
-        os.getcwd()
-
-        index_file = os.getcwd() + '/tests/DATA/nao.txt'
-        clim_file = os.getcwd() + '/tests/DATA/APGD_prcpComo.txt'
-        filename = 'testComoNAO'
-
-        # #### USER INPUT ####
-        LOGGER.info("configuration of the process")
-
-        # Settings:
-        M = 2  # number of climate signal's phases; fixed
-        n_obs = 3  # number of observations (months); fixed
-        lag = 3  # lag-time (months) --> 3 = seasonal; fixed
-        months = month  # months to consider (J,F,M): [1,2,3] ; link this parameter to input parameter; from user input
-        startyr = start_year  # beginning of the time period to analyze; from user input
-        endyr = end_year  # end of the time period to analyze; from user input
-        n_yrs = endyr - startyr + 1  # number of years to analyze
-        fp = './maps/%s' % (filename) # link to output file path
-        fig, axes = plt.subplots(M, 1, figsize=(6, 12))
-
-        # Select the type of experiment:
-        # crv_flag:
-        #   True  = runs NIPA with crossvalidation
-        #   False = runs NIPA without crossvalidation and save the first SST-Principal Component for multi-variate model
-        #
-        crv_flag = True
-        sst_map_flag = True
-        scatter_plot_flag = True
-
-        ####################
-
-        # Don't mess with the next few lines
-        years = np.arange(startyr, startyr + n_yrs)"""
 
     LOGGER = logging.getLogger(__name__)
 
+    @staticmethod
     def _handler(request, response):
         ############################
         LOGGER.info("get input parameter")
