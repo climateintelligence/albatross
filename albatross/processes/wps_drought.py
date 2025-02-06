@@ -240,8 +240,6 @@ class Drought(Process):
                 timeseries['years'] = timeseries['years'][1]
                 timeseries['data'] = timeseries['data'][1]
                 timeseries['hindcast'] = timeseries['hindcast'][1]
-                # reg_stats['slope'] = reg_stats['slope'][1]
-                # reg_stats['intercept'] = reg_stats['intercept'][1]
 
         elif np.size(timeseries['hindcast'][1]) == 1:
             if math.isnan(timeseries['hindcast'][1]):
@@ -259,16 +257,6 @@ class Drought(Process):
         ts_file = './%s_timeseries.csv' % (filename)
         df_timeseries.to_csv(ts_file)
 
-        # df_reg_stats = pd.DataFrame(reg_stats)
-        # reg_file = './%s_reg_stats.csv' % (filename)
-        # df_reg_stats.to_csv(reg_file)
-
-        # if not crv_flag:
-        #     # save PC
-        #     pc1['pc1'] = np.concatenate(pc1['pc1'])
-        #     pc_file = './output/%s_pc1SST.csv' % (filename)
-        #     df1 = pd.DataFrame(pc1)
-        #     df1.to_csv(pc_file)
 
         LOGGER.info('NIPA run completed')
 
