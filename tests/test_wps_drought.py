@@ -1,4 +1,3 @@
-import pytest
 from pywps import Service
 from pywps.tests import client_for
 from albatross.processes.wps_drought import Drought  # Adjust path if necessary
