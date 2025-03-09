@@ -4,10 +4,9 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-from pathlib import Path
 
 
-from pywps import ComplexOutput, FORMATS, Format, LiteralInput, LiteralOutput, Process
+from pywps import ComplexOutput, Format, LiteralInput, LiteralOutput, Process
 from pywps.app.Common import Metadata
 
 # drought specific functions
@@ -30,7 +29,8 @@ class Drought(Process):
                 abstract="text file of precipitation",
                 # keywords=['name', 'firstname'],
                 default=(
-                    "https://github.com/climateintelligence/albatross/blob/new_NIPA/albatross/data/APGD_prcpComo.txt"
+                    "https://raw.githubusercontent.com/mxgiuliani00/CSI/master/"
+                    "NIPA/DATA/APGD_prcpComo.txt"
                 ),
                 data_type="string",
             ),
@@ -40,7 +40,7 @@ class Drought(Process):
                 abstract="examples: climate indicator of tele-connection patterns",
                 # keywords=['name', 'firstname'],
                 default=(
-                    "https://github.com/climateintelligence/albatross/blob/new_NIPA/albatross/data/nao.txt"
+                    "https://raw.githubusercontent.com/mxgiuliani00/CSI/master/NIPA/DATA/nao.txt"
                 ),
                 data_type="string",
             ),
@@ -69,13 +69,12 @@ class Drought(Process):
             ),  # this is new added user defined parameter
         ]
         outputs = [
-            ComplexOutput(
+            LiteralOutput(
                 "forecast_file",
                 "Forecast File ",
                 # abstract='negativ list',
                 # keywords=['output', 'result', 'response'],
-                as_reference=True,
-                supported_formats=[FORMATS.TEXT],
+                data_type="string",
             ),
             ComplexOutput(
                 "scatter_plot",
@@ -135,11 +134,10 @@ class Drought(Process):
         ###########################
         LOGGER.info("Select the input-output files")
 
-        index_file = request.inputs['indicator'].data
-        clim_file = request.inputs['pr'].data
+        index_file = os.path.join(os.getcwd(), "tests/DATA/nao.txt")
+        clim_file = os.path.join(os.getcwd(), "tests/DATA/APGD_prcpComo.txt")
         filename = "testComoNAO"
 
-        workdir = Path.cwd()
         # #### USER INPUT ####
         LOGGER.info("configuration of the process")
 
@@ -148,9 +146,9 @@ class Drought(Process):
         n_obs = 3  # number of observations (months); fixed
         lag = 3  # lag-time (months) --> 3 = seasonal; fixed
         n_yrs = endyr - startyr + 1  # number of years to analyze
-        # fp = workdir / "maps" / filename
-        # if not fp.parent.exists():
-        #     fp.parent.mkdir(parents=True, exist_ok=True)
+        fp = f"./maps/{filename}"  # link to output file path
+        if not os.path.exists(fp):
+            os.makedirs(fp)
 
         fig, axes = plt.subplots(M, 1, figsize=(6, 12))
 
@@ -179,8 +177,8 @@ class Drought(Process):
         )
 
         climdata, sst, index, phaseind = get_data(kwgroups)
-        sst_fp = workdir / "sst_maps" / filename
-        scatter_fp = workdir / "scatter_plots" / filename   
+        sst_fp = "./sst_maps/%s" % (filename)
+        scatter_fp = "./scatter_plots/%s" % (filename)
         sst_fig, sst_axes = plt.subplots(M, 1, figsize=(6, 12))
         scatter_fig, scatter_axes = plt.subplots(M, 1, figsize=(6, 12))
         timeseries = {"years": [], "data": [], "hindcast": []}
@@ -206,8 +204,8 @@ class Drought(Process):
             if sst_map_flag:
                 fig, axes, m = sstMap(model, fig=fig, ax=axes)
                 axes.set_title("%s, %.2f" % (phase, model.correlation))
-                fig.savefig(sst_fp)
-                plt.close(sst_fig)
+                fig.savefig(fp)
+                plt.close(fig)
 
         else:
             for phase, sst_ax, scatter_ax in zip(phaseind, sst_axes, scatter_axes):
@@ -271,13 +269,13 @@ class Drought(Process):
             timeseries["hindcast"] = np.concatenate(timeseries["hindcast"])
 
         df_timeseries = pd.DataFrame(timeseries)
-        ts_file = workdir / f"{filename}_timeseries.csv"
+        ts_file = "./%s_timeseries.csv" % (filename)
         df_timeseries.to_csv(ts_file)
 
         LOGGER.info("NIPA run completed")
 
-        response.outputs["forecast_file"].file = ts_file
-        response.outputs["scatter_plot"].file = scatter_fp
-        response.outputs["sst_map"].file = sst_fp
+        response.outputs["forecast_file"].data = ts_file
+        response.outputs["scatter_plot"].data = scatter_fp
+        response.outputs["sst_map"].data = sst_fp
 
         return response
