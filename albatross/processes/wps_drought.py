@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from pathlib import Path
+from importlib.resources import files
 
 from pywps import ComplexOutput, FORMATS, Format, LiteralInput, LiteralOutput, Process
 from pywps.app.Common import Metadata
@@ -23,7 +24,7 @@ class Drought(Process):
 
     def __init__(self):
         inputs = [
-            LiteralInput(
+            ComplexInput(
                 "pr",
                 "Monthly global precipitation file",
                 abstract="text file of precipitation",
@@ -31,17 +32,17 @@ class Drought(Process):
                 default=(
                     "https://github.com/climateintelligence/albatross/blob/new_NIPA/albatross/data/APGD_prcpComo.txt"
                 ),
-                data_type="string",
+                supported_formats=[FORMATS.TEXT],
             ),
-            LiteralInput(
+            ComplexInput(
                 "indicator",
-                "NAO Indicator ",
+                "NAO Indicator",
                 abstract="examples: climate indicator of tele-connection patterns",
                 # keywords=['name', 'firstname'],
                 default=(
                     "https://github.com/climateintelligence/albatross/blob/new_NIPA/albatross/data/nao.txt"
                 ),
-                data_type="string",
+                supported_formats=[FORMATS.TEXT],
             ),
             LiteralInput(
                 "start_year",
@@ -113,7 +114,7 @@ class Drought(Process):
     LOGGER = logging.getLogger(__name__)
 
     @staticmethod
-    def _handler(request, response):
+    def _handler(self, request, response):
         ############################
         LOGGER.info("get input parameter")
         ############################
@@ -134,11 +135,11 @@ class Drought(Process):
         ###########################
         LOGGER.info("Select the input-output files")
 
-        index_file = request.inputs['indicator'].data
-        clim_file = request.inputs['pr'].data
+        index_file = files('albatross').joinpath('data', 'nao.txt')
+        clim_file = files('albatross').joinpath('data', 'APGD_prcpComo.txt')
         filename = "testComoNAO"
 
-        workdir = Path.cwd()
+        workdir = Path(self.workdir)
         # #### USER INPUT ####
         LOGGER.info("configuration of the process")
 
