@@ -107,8 +107,8 @@ class Drought(Process):
             status_supported=True
         )
 
-    @staticmethod
-    def _handler(request, response):
+  
+    def _handler(self,request, response):
         
         ############################
         LOGGER.info("get input parameter")
