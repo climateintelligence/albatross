@@ -1,16 +1,14 @@
 import logging
 import math
-from pywps import Process, LiteralInput, LiteralOutput, ComplexInput, ComplexOutput
+from pywps import Process, LiteralInput, ComplexInput, ComplexOutput
 from pywps import FORMATS, Format
-from pywps.app.Common import Metadata
+# from pywps.app.Common import Metadata
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 from pathlib import Path
 from importlib.resources import files
 
-from pywps import ComplexOutput, FORMATS, Format, LiteralInput, LiteralOutput, Process
 from pywps.app.Common import Metadata
 
 # drought specific functions
@@ -114,9 +112,7 @@ class Drought(Process):
             status_supported=True,
         )
 
-
-    def _handler(self,request, response):
-        
+    def _handler(self, request, response):
         ############################
         LOGGER.info("get input parameter")
         ############################
@@ -137,8 +133,8 @@ class Drought(Process):
         ###########################
         LOGGER.info("Select the input-output files")
 
-        index_file = files('albatross').joinpath('data', 'nao.txt')
-        clim_file = files('albatross').joinpath('data', 'APGD_prcpComo.txt')
+        index_file = files("albatross").joinpath("data", "nao.txt")
+        clim_file = files("albatross").joinpath("data", "APGD_prcpComo.txt")
         filename = "testComoNAO"
 
         workdir = Path(self.workdir)
@@ -182,7 +178,7 @@ class Drought(Process):
 
         climdata, sst, index, phaseind = get_data(kwgroups)
         sst_fp = workdir / "sst_maps" / filename
-        scatter_fp = workdir / "scatter_plots" / filename   
+        scatter_fp = workdir / "scatter_plots" / filename
         sst_fig, sst_axes = plt.subplots(M, 1, figsize=(6, 12))
         scatter_fig, scatter_axes = plt.subplots(M, 1, figsize=(6, 12))
         timeseries = {"years": [], "data": [], "hindcast": []}

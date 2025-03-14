@@ -44,6 +44,7 @@ def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
         'endyr': str(kwargs['endyr']),
         'nbox': str(kwargs['n_mon'])
     }
+    print("AAAAAAAAAAAAAAAAAAAAAAAAAA")
     fp = os.getcwd() + '/tests/DATA/nipa/SST/' + DLargs['startmon'] + DLargs['startyr'] + \
         '_' + DLargs['endmon'] + DLargs['endyr'] + '_nbox_' + DLargs['nbox'] + '_version' + version
 
