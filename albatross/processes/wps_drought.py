@@ -137,7 +137,7 @@ class Drought(Process):
         #         shutil.copyfileobj(response, tmp_pr)
         # with open(tmp_pr.name) as clim_file:
         #     pass
-        import os 
+       
         os.getcwd()
         
         index_file = os.getcwd() + '/tests/DATA/nao.txt'
