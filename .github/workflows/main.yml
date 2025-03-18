@@ -17,6 +17,7 @@ jobs:
     - name: Install packages
       run: |
         sudo apt-get -y install pandoc graphviz
+    
     - name: Setup Conda (Micromamba) with Python${{ matrix.python-version }}
       uses: mamba-org/setup-micromamba@v1
       with:
@@ -26,7 +27,9 @@ jobs:
         create-args: >-
           conda
           python=${{ matrix.python-version }}
-        post-cleanup: none  # Disable cleanup after the job
+        post-cleanup: none
+        environment-name: nipaenv
+        
     - name: Conda and Mamba versions
       run: |
         conda --version
