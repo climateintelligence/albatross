@@ -2,6 +2,7 @@ name: base
 channels:
   - conda-forge
   - defaults
+  - anaconda
 dependencies:
   - _anaconda_depends=2024.02=py311_openblas_1
   - abseil-cpp=20230802.0=h313beb8_2
