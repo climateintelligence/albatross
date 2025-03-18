@@ -1,4 +1,4 @@
-name: base
+name: nipaenv
 channels:
   - conda-forge
   - defaults
