@@ -21,9 +21,13 @@ jobs:
     # Clean up any previous micromamba setup before installing again
     - name: Clean up previous micromamba setup
       run: |
-        rm -rf /home/runner/micromamba-bin
-        rm -rf /home/runner/work/_temp/setup-micromamba
-
+        if [ -d "/home/runner/micromamba-bin" ]; then
+         rm -rf /home/runner/micromamba-bin
+        fi
+        if [ -d "/home/runner/work/_temp/setup-micromamba" ]; then
+         rm -rf /home/runner/work/_temp/setup-micromamba
+        fi
+        
     - name: Setup Conda (Micromamba) with Python${{ matrix.python-version }}
       uses: mamba-org/setup-micromamba@v1
       with:
