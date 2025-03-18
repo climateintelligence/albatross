@@ -26,7 +26,7 @@ jobs:
         create-args: >-
           conda
           python=${{ matrix.python-version }}
-        cleanup: false  # Prevent cleanup to avoid errors
+        post-cleanup: false  # Prevent post job cleanup (keep micromamba)
     - name: Conda and Mamba versions
       run: |
         conda --version
