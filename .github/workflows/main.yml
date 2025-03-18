@@ -17,17 +17,6 @@ jobs:
     - name: Install packages
       run: |
         sudo apt-get -y install pandoc graphviz
-
-    # Clean up any previous micromamba setup before installing again
-    - name: Clean up previous micromamba setup
-      run: |
-        if [ -d "/home/runner/micromamba-bin" ]; then
-         rm -rf /home/runner/micromamba-bin
-        fi
-        if [ -d "/home/runner/work/_temp/setup-micromamba" ]; then
-         rm -rf /home/runner/work/_temp/setup-micromamba
-        fi
-        
     - name: Setup Conda (Micromamba) with Python${{ matrix.python-version }}
       uses: mamba-org/setup-micromamba@v1
       with:
@@ -37,26 +26,25 @@ jobs:
         create-args: >-
           conda
           python=${{ matrix.python-version }}
-
+        cleanup: false  # Prevent cleanup to avoid errors
     - name: Conda and Mamba versions
       run: |
         conda --version
         echo "micromamba: $(micromamba --version)"
-
     - name: Install requirements 📦
       run: |
         python -m pip install --upgrade pip
         pip install -e .
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         if [ -f requirements_dev.txt ]; then pip install -r requirements_dev.txt; fi
-
     - name: Test with pytest ⚙️
       run: make test
-
     - name: Lint with flake8 ⚙️
       run: make lint
       if: matrix.python-version == 3.10
-
+    # - name: Check formatting with black ⚙️
+    #   run: black --check --target-version py310 rook tests
+    #   if: matrix.python-version == 3.10
     - name: Build docs 🏗️
       run: make docs
       if: matrix.python-version == 3.10
