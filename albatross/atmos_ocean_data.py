@@ -11,10 +11,10 @@ LOGGER = logging.getLogger("PYWPS")
 
 
 def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
-    """
-    This function downloads data from the new ERSSTv3b on the IRI data library
-    kwargs should contain: startyr, endyr, startmon, endmon, nbox
-    """
+    '''
+    # This function downloads data from the new ERSSTv3b on the IRI data library
+    # kwargs should contain: startyr, endyr, startmon, endmon, nbox
+    '''
     import pickle
     import re
     from collections import namedtuple
@@ -44,7 +44,6 @@ def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
         'endyr': str(kwargs['endyr']),
         'nbox': str(kwargs['n_mon'])
     }
-    print("AAAAAAAAAAAAAAAAAAAAAAAAAA")
     fp = os.getcwd() + '/tests/DATA/nipa/SST/' + DLargs['startmon'] + DLargs['startyr'] + \
         '_' + DLargs['endmon'] + DLargs['endyr'] + '_nbox_' + DLargs['nbox'] + '_version' + version
 
@@ -62,7 +61,6 @@ def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
     LOGGER.info('Starting download...')
     LOGGER.info(SSTurl)
     dataset = open_url(SSTurl)         # Python 3.6 dependency
-    # dataset = open_dataset(SSTurl)
     arg = 'anom' if anomalies else 'sst'
     sst = dataset[arg]
 
@@ -81,8 +79,7 @@ def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
     ntime = len(t)
 
     idx = arange(0, ntime, nseasons).astype(int)
-    # LOGGER.info(idx)
-    # LOGGER.info(grid)
+
     sst = grid[idx]
     sstdata = {'grid': sst, 'lat': sstlat, 'lon': sstlon}
     var = seasonal_var(sst, sstlat, sstlon)
@@ -242,7 +239,10 @@ def load_climdata(**kwargs):
     [idx.extend(arange(len(kwargs['months'])) + idx_start + 12 * n) for n in range(kwargs['n_year'])]
     climdata = zeros((kwargs['n_year']))
     for year, mons in enumerate(idx):
-        climdata[year] = data.values[mons].mean()
+        if data.values [ mons ].size > 0:
+            climdata [ year ] = data.values [ mons ].mean()
+        else:
+            LOGGER.warning(f"No data available for year {year}, skipping mean calculation.")
     return climdata
 
 

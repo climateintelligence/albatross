@@ -1,19 +1,21 @@
 import logging
-import math
 from pywps import Process, LiteralInput, ComplexInput, ComplexOutput
 from pywps import FORMATS, Format
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 from pathlib import Path
 from importlib.resources import files
-
 from pywps.app.Common import Metadata
 
 # drought specific functions
 from albatross.climdiv_data import get_data, create_kwgroups
 from albatross.new_simpleNIPA import NIPAphase
-from albatross.utils import sstMap
+from albatross.utils import sstMap, make_scatterplot
+
+# NIPA specific imports
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+import math
+
 
 LOGGER = logging.getLogger("PYWPS")
 FORMAT_PNG = Format("image/png", extension=".png", encoding="base64")
@@ -45,26 +47,26 @@ class Drought(Process):
             LiteralInput(
                 "start_year",
                 "Start Year",
-                abstract="2020",
+                abstract="1971",
                 # keywords=['name', 'firstname'],
-                default="2020",
+                default="1971",
                 data_type="string",
             ),
             LiteralInput(
                 "end_year",
                 "End Year",
-                abstract="2022",
-                default="2022",
+                abstract="2008",
+                default="2008",
                 data_type="string",
             ),  # this is new added user defined parameter
+
             LiteralInput(
                 "month",
                 "Forecasted Month",
-                abstract="8",
-                default="8",
-                # keywords=['name', 'firstname'],
+                default="1,2,3",  # 👈 Provide multiple months as a comma-separated string
                 data_type="string",
-            ),  # this is new added user defined parameter
+            )
+            ,  # this is new added user defined parameter
         ]
         outputs = [
             ComplexOutput(
@@ -106,164 +108,165 @@ class Drought(Process):
         )
 
     def _handler(self, request, response):
-        ############################
-        LOGGER.info("get input parameter")
-        ############################
-        # Retrieve user inputs
+        LOGGER.info("Starting drought processing...")
+
+        # Status update
+        response.update_status("Retrieving input data and initializing variables...", 10)
+
         try:
-            months = [
-                int(m) for m in request.inputs["months"].data
-            ]  # Assuming a list of integers is passed
-            startyr = int(request.inputs["start_year"].data)
-            endyr = int(request.inputs["end_year"].data)
+            months = list(map(int, request.inputs["month"][0].data.split(",")))
+            startyr = int(request.inputs["start_year"][0].data)
+            endyr = int(request.inputs [ "end_year" ] [ 0 ].data)
         except KeyError as e:
             LOGGER.error(f"Missing required input parameter: {e}")
             response.status = "Failed"
             return response
 
-        ###########################
-        LOGGER.info("start processing")
-        ###########################
         LOGGER.info("Select the input-output files")
-
         index_file = files("albatross").joinpath("data", "nao.txt")
         clim_file = files("albatross").joinpath("data", "APGD_prcpComo.txt")
         filename = "testComoNAO"
 
         workdir = Path(self.workdir)
-        # #### USER INPUT ####
-        LOGGER.info("configuration of the process")
 
-        # Settings:
-        M = 2  # number of climate signal's phases; fixed
-        n_obs = 3  # number of observations (months); fixed
-        lag = 3  # lag-time (months) --> 3 = seasonal; fixed
-        n_yrs = endyr - startyr + 1  # number of years to analyze
+        # Ensure output directories exist
+        (workdir / "sst_maps").mkdir(parents=True, exist_ok=True)
+        (workdir / "scatter_plots").mkdir(parents=True, exist_ok=True)
 
-        fig, axes = plt.subplots(M, 1, figsize=(6, 12))
+        # Update status
+        response.update_status("Running NIPA drought model...", 50)
 
-        # Select the type of experiment:
-        crv_flag = True
-        sst_map_flag = True
-        scatter_plot_flag = True
-
-        ####################
-        # Processing
-        years = np.arange(startyr, startyr + n_yrs)
-
+        # Processing steps...
         kwgroups = create_kwgroups(
             debug=True,
             climdata_months=months,
             climdata_startyr=startyr,
-            n_yrs=n_yrs,
-            n_mon_sst=n_obs,
-            n_mon_index=n_obs,
-            sst_lag=lag,
-            n_phases=M,
+            n_yrs= endyr - startyr + 1,
+            n_mon_sst=3,
+            n_mon_index=3,
+            sst_lag=3,
+            n_phases=2,
             phases_even=True,
-            index_lag=lag,
+            index_lag=3,
             index_fp=index_file,
             climdata_fp=clim_file,
         )
 
+        M = 2
+        crv_flag = True
+        map_flag = True
+
+        # Years goes from start year to end year
+        years = np.arange(startyr, endyr + 1)
+
+        # Run Model
         climdata, sst, index, phaseind = get_data(kwgroups)
-        sst_fp = workdir / "sst_maps" / filename
-        scatter_fp = workdir / "scatter_plots" / filename
-        sst_fig, sst_axes = plt.subplots(M, 1, figsize=(6, 12))
-        scatter_fig, scatter_axes = plt.subplots(M, 1, figsize=(6, 12))
-        timeseries = {"years": [], "data": [], "hindcast": []}
 
-        LOGGER.info("NIPA running...")  # print('NIPA running...')
+        # Output file paths
+        sst_fp = workdir / "sst_maps" / f"{filename}_sst.png"
+        scatter_fp = workdir / "scatter_plots" / f"{filename}_scatter.png"
+        ts_file = workdir / f"{filename}_timeseries.csv"
 
-        if M == 1:
-            phase = "allyears"
-            model = NIPAphase(climdata, sst, index, phaseind[phase])
+        fig, axes = plt.subplots(M, 1, figsize=(6, 12))
+        timeseries = {'years': [ ], 'data': [ ], 'hindcast': [ ]}
+        pc1 = {'pc1': [ ]}
+
+        print('NIPA running...')
+        if M==1:
+            phase = 'allyears'
+            model = NIPAphase(climdata, sst, index, phaseind [ phase ])
             model.phase = phase
-            model.years = years[phaseind[phase]]
+            model.years = years [ phaseind [ phase ] ]
             model.bootcorr(corrconf=0.95)
             model.gridCheck()
             model.crossvalpcr(xval=crv_flag)
-            timeseries["years"] = model.years
-            timeseries["data"] = model.clim_data
-            timeseries["hindcast"] = model.hindcast
-            LOGGER.info(timeseries["years"])
-            LOGGER.info(timeseries["data"])
+            timeseries [ 'years' ] = model.years
+            timeseries [ 'data' ] = model.clim_data
+            timeseries [ 'hindcast' ] = model.hindcast
 
-            if sst_map_flag:
+            if map_flag:
                 fig, axes, m = sstMap(model, fig=fig, ax=axes)
-                axes.set_title("%s, %.2f" % (phase, model.correlation))
+                axes.set_title('%s, %.2f' % (phase, model.correlation))
                 fig.savefig(sst_fp)
-                plt.close(sst_fig)
+                plt.close(fig)
+
+            # plot hindcast vs data
+            make_scatterplot(model, scatter_fp)
 
         else:
-            for phase, sst_ax, scatter_ax in zip(phaseind, sst_axes, scatter_axes):
-                model = NIPAphase(climdata, sst, index, phaseind[phase])
+            for phase, ax in zip(phaseind, axes):
+                model = NIPAphase(climdata, sst, index, phaseind [ phase ])
                 model.phase = phase
-                model.years = years[phaseind[phase]]
+                model.years = years [ phaseind [ phase ] ]
                 model.bootcorr(corrconf=0.95)
                 model.gridCheck()
                 model.crossvalpcr(xval=crv_flag)
-                timeseries["years"].append(model.years)
-                timeseries["data"].append(model.clim_data)
-                timeseries["hindcast"].append(model.hindcast)
+                timeseries [ 'years' ].append(model.years)
+                timeseries [ 'data' ].append(model.clim_data)
+                timeseries [ 'hindcast' ].append(model.hindcast)
+                if not crv_flag:
+                    if hasattr(model, 'pc1'):
+                        pc1 [ 'pc1' ].append(model.pc1)
 
-                if sst_map_flag:
-                    sst_fig, sst_ax, m = sstMap(model, fig=sst_fig, ax=sst_ax)
-                    sst_ax.set_title("%s, %.2f" % (phase, model.correlation))
-
-                if scatter_plot_flag:
-                    scatter_ax.scatter(model.clim_data, model.hindcast)
-                    # Add 1:1 line
-                    min_val = min(min(model.clim_data), min(model.hindcast))
-                    max_val = max(max(model.clim_data), max(model.hindcast))
-                    scatter_ax.plot(
-                        [min_val, max_val], [min_val, max_val], "r--", label="1:1 Line"
-                    )  # Red dashed line
-                    scatter_ax.set_title("%s, %.2f" % (phase, model.correlation))
-                    scatter_ax.set_xlabel("observation")
-                    scatter_ax.set_ylabel("forecast")
-                    scatter_ax.legend()  # Add legend
-
-            # Save SST figure
-            if sst_map_flag:
-                sst_fig.tight_layout()
-                sst_fig.savefig(sst_fp)
-                plt.close(sst_fig)
-
-            # Save scatter figure
-            if scatter_plot_flag:
-                scatter_fig.tight_layout()
-                scatter_fig.savefig(scatter_fp)
-                plt.close(scatter_fig)
+                if map_flag:
+                    fig, ax, m = sstMap(model, fig=fig, ax=ax)
+                    ax.set_title('%s, %.2f' % (phase, model.correlation))
+                    fig.savefig(sst_fp)
+                    plt.close(fig)
 
         # save timeseries (exceptions handled only for 2 phase analysis)
-        if np.size(timeseries["hindcast"][0]) == 1:
-            if math.isnan(timeseries["hindcast"][0]):
+        if np.size(timeseries [ 'hindcast' ] [ 0 ])==1:
+            if math.isnan(timeseries [ 'hindcast' ] [ 0 ]):
                 # no result for the first phase -> consider only the second set of results
-                timeseries["years"] = timeseries["years"][1]
-                timeseries["data"] = timeseries["data"][1]
-                timeseries["hindcast"] = timeseries["hindcast"][1]
+                timeseries [ 'years' ] = timeseries [ 'years' ] [ 1 ]
+                timeseries [ 'data' ] = timeseries [ 'data' ] [ 1 ]
+                timeseries [ 'hindcast' ] = timeseries [ 'hindcast' ] [ 1 ]
 
-        elif np.size(timeseries["hindcast"][1]) == 1:
-            if math.isnan(timeseries["hindcast"][1]):
+        elif np.size(timeseries [ 'hindcast' ] [ 1 ])==1:
+            if math.isnan(timeseries [ 'hindcast' ] [ 1 ]):
                 # no result for the second phase -> consider only the first set of results
-                timeseries["years"] = timeseries["years"][0]
-                timeseries["data"] = timeseries["data"][0]
-                timeseries["hindcast"] = timeseries["hindcast"][0]
+                timeseries [ 'years' ] = timeseries [ 'years' ] [ 0 ]
+                timeseries [ 'data' ] = timeseries [ 'data' ] [ 0 ]
+                timeseries [ 'hindcast' ] = timeseries [ 'hindcast' ] [ 0 ]
 
         else:
-            timeseries["years"] = np.concatenate(timeseries["years"])
-            timeseries["data"] = np.concatenate(timeseries["data"])
-            timeseries["hindcast"] = np.concatenate(timeseries["hindcast"])
+            timeseries [ 'years' ] = np.concatenate(timeseries [ 'years' ])
+            timeseries [ 'data' ] = np.concatenate(timeseries [ 'data' ])
+            timeseries [ 'hindcast' ] = np.concatenate(timeseries [ 'hindcast' ])
 
-        df_timeseries = pd.DataFrame(timeseries)
-        ts_file = workdir / f"{filename}_timeseries.csv"
-        df_timeseries.to_csv(ts_file)
+        # plot hindcast vs data
+        make_scatterplot(model, scatter_fp)
+        df = pd.DataFrame(timeseries)
+        df.to_csv(ts_file)
 
-        LOGGER.info("NIPA run completed")
+        if not crv_flag:
+            # save PC
+            pc1 [ 'pc1' ] = np.concatenate(pc1 [ 'pc1' ])
+            pc_file = './output/%s_pc1SST.csv' % (filename)
+            df1 = pd.DataFrame(pc1)
+            df1.to_csv(pc_file)
 
-        response.outputs["forecast_file"].file = ts_file
-        response.outputs["scatter_plot"].file = scatter_fp
-        response.outputs["sst_map"].file = sst_fp
+        print('NIPA run completed')
+
+        # Update status before saving outputs
+        response.update_status("Saving outputs and generating final results...", 90)
+
+        # Save and check if files exist before assigning to response
+        if ts_file.exists():
+            response.outputs [ "forecast_file" ].file = ts_file
+        else:
+            LOGGER.warning(f"Forecast file {ts_file} not found!")
+
+        if scatter_fp.exists():
+            response.outputs [ "scatter_plot" ].file = scatter_fp
+        else:
+            LOGGER.warning(f"Scatter plot {scatter_fp} not found!")
+
+        if sst_fp.exists():
+            response.outputs [ "sst_map" ].file = sst_fp
+        else:
+            LOGGER.warning(f"SST map {sst_fp} not found!")
+
+        response.update_status("Drought process completed successfully!", 100)
 
         return response

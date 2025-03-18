@@ -71,7 +71,7 @@ class NIPAphase(object):
         self, ntim=1000, corrconf=0.95, bootconf=0.80, debug=False, quick=True
     ):
         from numpy import isnan, ma
-        from utils import sig_test, vcorr
+        from albatross.utils import sig_test, vcorr
 
         corrlevel = 1 - corrconf
 
@@ -170,7 +170,7 @@ class NIPAphase(object):
         import numpy as np
         from scipy.stats import linregress
         from scipy.stats import pearsonr as corr
-        from utils import weightsst
+        from albatross.utils import weightsst
 
         predictand = self.clim_data
 

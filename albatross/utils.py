@@ -7,7 +7,6 @@ from matplotlib import cm
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-
 def plot_timeseries(timeseries, fp):
     results = {}
     for key in timeseries:
@@ -22,17 +21,15 @@ def plot_timeseries(timeseries, fp):
     plt.plot(results['years'], results['data'], label='original')
 
     plt.legend()
-    plt.savefig(fp + '_timeseries')
+    plt.savefig(str(fp) + '_scatterplot.png')
     return
-
 
 def make_scatterplot(model, fp):
     plt.scatter(model.clim_data, model.hindcast)
     plt.title('%s, %.2f' % (model.phase, model.correlation))
-    plt.savefig(fp + '_scatterplot')
+    plt.savefig(fp)
     plt.close()
     return
-
 
 def weightsst(sst):
     # SST needs to be downloaded using the openDAPsst function
