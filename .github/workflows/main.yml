@@ -4,7 +4,6 @@ on: [ push, pull_request ]
 
 jobs:
   build:
-
     name: Conda Build with Python${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:
@@ -15,17 +14,22 @@ jobs:
         shell: bash -l {0}
     steps:
     - uses: actions/checkout@v3
-    
     - name: Install packages
       run: |
         sudo apt-get -y install pandoc graphviz
+
+    # Clean up any previous micromamba setup before installing again
+    - name: Clean up previous micromamba setup
+      run: |
+        rm -rf /home/runner/micromamba-bin
+        rm -rf /home/runner/work/_temp/setup-micromamba
 
     - name: Setup Conda (Micromamba) with Python${{ matrix.python-version }}
       uses: mamba-org/setup-micromamba@v1
       with:
         cache-downloads: true
         cache-environment: true
-        environment-file: environment.yml  # Ensure that pywps is in the environment.yml
+        environment-file: environment.yml
         create-args: >-
           conda
           python=${{ matrix.python-version }}
@@ -35,20 +39,12 @@ jobs:
         conda --version
         echo "micromamba: $(micromamba --version)"
 
-    - name: Install pywps directly with pip
-      run: |
-        python -m pip install pywps
-
-    - name: Install additional requirements 📦
+    - name: Install requirements 📦
       run: |
         python -m pip install --upgrade pip
         pip install -e .
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         if [ -f requirements_dev.txt ]; then pip install -r requirements_dev.txt; fi
-
-    - name: Verify installed packages
-      run: |
-        pip list  # This will show all installed packages to ensure pywps is installed
 
     - name: Test with pytest ⚙️
       run: make test
