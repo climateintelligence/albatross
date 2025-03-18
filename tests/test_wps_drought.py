@@ -1,6 +1,10 @@
 from pywps import Service
 from pywps.tests import client_for
 from albatross.processes.wps_drought import Drought  # Adjust path if necessary
+from pywps import configuration
+
+# Print PyWPS workdir
+print("PyWPS Work Directory:", configuration.get_config_value("server", "workdir"))
 
 
 def test_wps_drought():

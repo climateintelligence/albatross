@@ -2,7 +2,6 @@ import logging
 import math
 from pywps import Process, LiteralInput, ComplexInput, ComplexOutput
 from pywps import FORMATS, Format
-# from pywps.app.Common import Metadata
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,7 +28,6 @@ class Drought(Process):
                 "pr",
                 "Monthly global precipitation file",
                 abstract="text file of precipitation",
-                # keywords=['name', 'firstname'],
                 default=(
                     "https://github.com/climateintelligence/albatross/blob/new_NIPA/albatross/data/APGD_prcpComo.txt"
                 ),
@@ -39,7 +37,6 @@ class Drought(Process):
                 "indicator",
                 "NAO Indicator",
                 abstract="examples: climate indicator of tele-connection patterns",
-                # keywords=['name', 'firstname'],
                 default=(
                     "https://github.com/climateintelligence/albatross/blob/new_NIPA/albatross/data/nao.txt"
                 ),
@@ -73,22 +70,18 @@ class Drought(Process):
             ComplexOutput(
                 "forecast_file",
                 "Forecast File ",
-                # abstract='negativ list',
-                # keywords=['output', 'result', 'response'],
                 as_reference=True,
                 supported_formats=[FORMATS.TEXT],
             ),
             ComplexOutput(
                 "scatter_plot",
                 "Scatter Plot",
-                # abstract='Plot of observations and predictions with a 1:1 line, accuracy and equation.',
                 as_reference=True,
                 supported_formats=[FORMAT_PNG],
             ),
             ComplexOutput(
                 "sst_map",
                 "SST Map",
-                # abstract='Plot of selected SST map',
                 as_reference=True,
                 supported_formats=[FORMAT_PNG],
             ),
@@ -146,9 +139,6 @@ class Drought(Process):
         n_obs = 3  # number of observations (months); fixed
         lag = 3  # lag-time (months) --> 3 = seasonal; fixed
         n_yrs = endyr - startyr + 1  # number of years to analyze
-        # fp = f"./maps/{filename}"  # link to output file path
-        # if not os.path.exists(fp):
-        #     os.makedirs(fp)
 
         fig, axes = plt.subplots(M, 1, figsize=(6, 12))
 
@@ -182,8 +172,6 @@ class Drought(Process):
         sst_fig, sst_axes = plt.subplots(M, 1, figsize=(6, 12))
         scatter_fig, scatter_axes = plt.subplots(M, 1, figsize=(6, 12))
         timeseries = {"years": [], "data": [], "hindcast": []}
-        # pc1 = {'pc1':[]}
-        # reg_stats = {'slope':[],'intercept':[]}
 
         LOGGER.info("NIPA running...")  # print('NIPA running...')
 
