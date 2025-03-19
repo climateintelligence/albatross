@@ -1,4 +1,4 @@
-name: Test and Build
+name: Build and Test
 
 on:
   push:
@@ -13,22 +13,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Set up conda
-        uses: conda-incubator/setup-miniconda@v2
-        with:
-          auto-update-conda: false
-          environment-file: environment.yml
-          python-version: 3.11
-          activate-environment: nipa_env  # Using the correct environment name here
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
 
-      - name: Install dependencies
-        run: |
-          conda env update --file environment.yml --name nipa_env
-          conda activate nipa_env  # Activating the correct environment
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r ../requirements.txt
 
-      - name: Run tests
-        run: |
-          pytest tests/test_wps_drought.py -s
+    - name: Run tests
+      run: |
+        pytest tests/test_wps_drought.py -s
