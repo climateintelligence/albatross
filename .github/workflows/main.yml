@@ -22,12 +22,12 @@ jobs:
           auto-update-conda: false
           environment-file: environment.yml
           python-version: 3.11
-          activate-environment: nipa_env
+          activate-environment: nipa_env  # Using the correct environment name here
 
       - name: Install dependencies
         run: |
           conda env update --file environment.yml --name nipa_env
-          conda activate nipa_env
+          conda activate nipa_env  # Activating the correct environment
 
       - name: Run tests
         run: |
