@@ -50,15 +50,14 @@ def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
     # Build the relative path to the data file
     fp = os.path.join(
         base_dir,
-        '..', 'tests', 'DATA', 'nipa', 'SST',
+        'data','global_data','SST',
         f"{DLargs [ 'startmon' ]}{DLargs [ 'startyr' ]}_{DLargs [ 'endmon' ]}{DLargs [ 'endyr' ]}_nbox_{DLargs [ 'nbox' ]}_version{version}"
     )
 
     # Append suffix based on anomalies flag
     fp = fp + '_anoms' if anomalies else fp + '_ssts'
-
-    print('Path for temporary file:  %s' % (fp))
-
+    os.makedirs(os.path.dirname(fp), exist_ok=True)
+    
     seasonal_var = namedtuple('seasonal_var', ('data', 'lat', 'lon'))
 
     LOGGER.info('New SST field, will save to %s' % fp)
