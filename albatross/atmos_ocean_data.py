@@ -44,9 +44,17 @@ def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
         'endyr': str(kwargs['endyr']),
         'nbox': str(kwargs['n_mon'])
     }
-    fp = os.getcwd() + '/tests/DATA/nipa/SST/' + DLargs['startmon'] + DLargs['startyr'] + \
-        '_' + DLargs['endmon'] + DLargs['endyr'] + '_nbox_' + DLargs['nbox'] + '_version' + version
+    # Base path: directory of the current file (portable and robust)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
 
+    # Build the relative path to the data file
+    fp = os.path.join(
+        base_dir,
+        '..', 'tests', 'DATA', 'nipa', 'SST',
+        f"{DLargs [ 'startmon' ]}{DLargs [ 'startyr' ]}_{DLargs [ 'endmon' ]}{DLargs [ 'endyr' ]}_nbox_{DLargs [ 'nbox' ]}_version{version}"
+    )
+
+    # Append suffix based on anomalies flag
     fp = fp + '_anoms' if anomalies else fp + '_ssts'
 
     print('Path for temporary file:  %s' % (fp))

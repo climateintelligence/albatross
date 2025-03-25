@@ -68,7 +68,11 @@ def vcorr(X, y):
     ym = y.mean()
     r_num = np.sum((X - Xm) * (y - ym), axis=1)
     r_den = np.sqrt(np.sum((X - Xm)**2, axis=1) * np.sum((y - ym)**2))
-    r = (r_num / r_den).reshape(nlat, nlon)
+    #r = (r_num / r_den).reshape(nlat, nlon)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        r = np.true_divide(r_num, r_den)
+        r [ ~np.isfinite(r) ] = 0  # or np.nan, depending on your use case
+        r = r.reshape(nlat, nlon)
 
     return r
 
