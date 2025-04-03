@@ -51,7 +51,8 @@ def make_scatterplot(model, fp):
     # Calculate metrics
     r2 = r2_score(x, y)
     mae = mean_absolute_error(x, y)
-    rmse = mean_squared_error(x, y, squared=False)
+    mse = mean_squared_error(x, y)
+    rmse = np.sqrt(mse)
 
     # Plot
     plt.figure(figsize=(6, 6))
