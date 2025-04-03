@@ -153,8 +153,8 @@ class Drought(Process):
         indicator = request.inputs [ "indicator" ] [ 0 ].data.lower()
         if indicator=="nao":
             index_file = files("albatross").joinpath("data", "nao.txt")
-        elif indicator=="enso":
-            index_file = files("albatross").joinpath("data", "enso.txt")
+        elif indicator=="mei":
+            index_file = files("albatross").joinpath("data", "mei.txt")
         else:
             raise Exception(f"Unsupported indicator: {indicator}")
 
