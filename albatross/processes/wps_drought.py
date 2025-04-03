@@ -62,9 +62,9 @@ class Drought(Process):
             LiteralInput(
                 "indicator",
                 "Climate Indicator",
-                abstract="Choose between 'nao' or 'enso'",
+                abstract="Choose between 'nao' or 'mei'",
                 data_type="string",
-                allowed_values=[ "nao", "enso" ],
+                allowed_values=[ "nao", "mei" ],
                 default="nao",
             ),
             LiteralInput(
