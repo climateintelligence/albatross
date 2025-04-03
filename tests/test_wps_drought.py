@@ -17,7 +17,7 @@ def test_wps_drought():
 
     # Correct the input parameters and encode URLs properly
     datainputs_dict = {
-        "indicator": "enso",
+        "indicator": "mei",
         "start_year": "1971",
         "end_year": "2018",
         "month": "1,2,3",  # Ensure the correct parameter name
