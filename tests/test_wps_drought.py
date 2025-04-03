@@ -3,6 +3,8 @@ from pywps.tests import client_for
 from albatross.processes.wps_drought import Drought  # Adjust path if necessary
 from pywps import configuration
 from urllib.parse import urlencode
+from pathlib import Path
+
 
 # Print PyWPS workdir
 print("PyWPS Work Directory:", configuration.get_config_value("server", "workdir"))
@@ -12,14 +14,22 @@ def test_wps_drought():
 
     # Initialize a WPS client with the Drought process
     client = client_for(Service(processes=[Drought()]))
+    # Path to the local .txt file for the test
+    local_txt_file = Path("/Users/giuliopalcic/Downloads/APGD_prcpComo.txt")
+
+    # Open the file to pass as input (simulate the upload)
+    with open(local_txt_file, 'rb') as f:  # 'rb' to open in binary mode
+        file_content = f.read()
+
 
     # Correct the input parameters and encode URLs properly
     datainputs_dict = {
-        "pr": "https://raw.githubusercontent.com/mxgiuliani00/CSI/master/NIPA/DATA/APGD_prcpComo.txt",
-        "indicator": "https://raw.githubusercontent.com/mxgiuliani00/CSI/master/NIPA/DATA/nao.txt",
+        "pr": file_content,
+        "indicator": "enso",
         "start_year": "1971",
-        "end_year": "2008",
-        "month": "1,2,3"  # Ensure the correct parameter name
+        "end_year": "2018",
+        "month": "1,2,3",  # Ensure the correct parameter name
+        "phase_mode": "2",
     }
 
     datainputs = urlencode(datainputs_dict, safe=":/")  # Encode properly

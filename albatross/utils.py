@@ -7,29 +7,77 @@ from matplotlib import cm
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-def plot_timeseries(timeseries, fp):
-    results = {}
-    for key in timeseries:
-        results[key] = np.zeros((0))
-        for item in timeseries[key]:
-            results[key] = np.concatenate((results[key], item))
-    idx = np.argsort(results['years'])
+def plot_pc1_vs_true(model, filepath):
 
-    for key in results:
-        results[key] = results[key][idx]
-    plt.plot(results['years'], results['hindcast'], label='hindcast')
-    plt.plot(results['years'], results['data'], label='original')
+    from sklearn.metrics import r2_score
+    x = model.pc1        # Principal component
+    y = model.clim_data   # Hindcast values
+
+    # Fit linear regression
+    slope, intercept = np.polyfit(x, y, 1)
+    y_pred = slope * x + intercept
+    r2 = r2_score(y, y_pred)
+
+    # Plot
+    plt.figure(figsize=(6, 6))
+    plt.scatter(x, y, label="Data points", alpha=0.7)
+    plt.plot(x, y_pred, color="red", label=f"y = {slope:.2f}x + {intercept:.2f}")
+    plt.xlabel("PC1 (SST)")
+    plt.ylabel("Hindcast")
+    plt.title(f"{model.phase} phase\nPC1 vs Hindcast")
+
+    # Add R² to corner
+    metrics_text = f"$R^2$: {r2:.2f}"
+    plt.text(
+        0.95, 0.05, metrics_text,
+        transform=plt.gca().transAxes,
+        fontsize=10,
+        verticalalignment="bottom",
+        horizontalalignment="right",
+        bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round,pad=0.5')
+    )
 
     plt.legend()
-    plt.savefig(str(fp) + '_scatterplot.png')
-    return
+    plt.tight_layout()
+    plt.savefig(filepath)
+    plt.close()
 
 def make_scatterplot(model, fp):
-    plt.scatter(model.clim_data, model.hindcast)
-    plt.title('%s, %.2f' % (model.phase, model.correlation))
+
+    from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+    x = model.clim_data      # true values (observed)
+    y = model.hindcast       # predicted values (hindcast)
+
+    # Calculate metrics
+    r2 = r2_score(x, y)
+    mae = mean_absolute_error(x, y)
+    rmse = mean_squared_error(x, y, squared=False)
+
+    # Plot
+    plt.figure(figsize=(6, 6))
+    plt.scatter(x, y, alpha=0.7, label="Data points")
+    # add line of best fit
+    plt.plot([x.min(), x.max()], [x.min(), x.max()], 'r--', lw=2, label='Perfect fit')
+    plt.xlabel("Observed")
+    plt.ylabel("Hindcast")
+    plt.title(f"{model.phase} phase")
+    plt.grid(True)
+
+    # Add metrics text box
+    metrics_text = f"$R^2$: {r2:.2f}\nMAE: {mae:.2f}\nRMSE: {rmse:.2f}"
+    plt.text(
+        0.8, 0.15,  # ⬅️ bottom-right corner in axes coordinates
+        metrics_text,
+        transform=plt.gca().transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round,pad=0.5')
+    )
+    plt.legend(loc="best")
+    plt.tight_layout()
     plt.savefig(fp)
     plt.close()
-    return
+
 
 def weightsst(sst):
     # SST needs to be downloaded using the openDAPsst function
