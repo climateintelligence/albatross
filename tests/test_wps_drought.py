@@ -14,17 +14,9 @@ def test_wps_drought():
 
     # Initialize a WPS client with the Drought process
     client = client_for(Service(processes=[Drought()]))
-    # Path to the local .txt file for the test
-    local_txt_file = Path("/Users/giuliopalcic/Downloads/APGD_prcpComo.txt")
-
-    # Open the file to pass as input (simulate the upload)
-    with open(local_txt_file, 'rb') as f:  # 'rb' to open in binary mode
-        file_content = f.read()
-
 
     # Correct the input parameters and encode URLs properly
     datainputs_dict = {
-        "pr": file_content,
         "indicator": "enso",
         "start_year": "1971",
         "end_year": "2018",
