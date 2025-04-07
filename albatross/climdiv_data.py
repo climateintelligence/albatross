@@ -7,18 +7,16 @@ from albatross.atmos_ocean_data import create_phase_index2, load_climdata, openD
 from albatross.utils import int_to_month
 
 
-def get_data(kwgroups):
+def get_data(kwgroups, workdir=None):
     clim_data = load_climdata(**kwgroups['climdata'])
-    sst = openDAPsst(newFormat=True, anomalies=True, **kwgroups['sst'])
+    sst = openDAPsst(newFormat=True, anomalies=True, workdir=workdir, **kwgroups['sst'])
     index, phaseind = create_phase_index2(**kwgroups['index'])
     return clim_data, sst, index, phaseind
-
 
 def create_kwgroups(debug=False, climdata_startyr=1871, n_yrs=145,
                     climdata_months=[1, 2, 3], n_mon_sst=3, sst_lag=3, n_mon_slp=3,
                     slp_lag=3, n_mon_index=3, index_lag=3, n_phases=2, phases_even=True,
                     index_fp='mei.txt', climdata_fp='APGD_prcp.txt'):
-    print(climdata_months)
     """
     This function takes information about the seasons, years, and type of divisional
     data to look at, and creates appropriate kwgroups (parameters) to be input into

@@ -199,8 +199,10 @@ class Drought(Process):
         # Years goes from start year to end year
         years = np.arange(startyr, endyr + 1)
 
+        workdir = Path(self.workdir)
+
         # Run Model
-        climdata, sst, index, phaseind = get_data(kwgroups)
+        climdata, sst, index, phaseind = get_data(kwgroups, workdir=workdir)
 
         # Output file paths
         sst_fp = workdir / "sst_maps" / f"corr_map.png"

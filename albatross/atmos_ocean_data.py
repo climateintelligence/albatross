@@ -10,7 +10,7 @@ from os import environ as EV
 LOGGER = logging.getLogger("PYWPS")
 
 
-def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
+def openDAPsst(version='3b', debug=False, anomalies=True, workdir = None, **kwargs):
     '''
     # This function downloads data from the new ERSSTv3b on the IRI data library
     # kwargs should contain: startyr, endyr, startmon, endmon, nbox
@@ -44,20 +44,15 @@ def openDAPsst(version='3b', debug=False, anomalies=True, **kwargs):
         'endyr': str(kwargs['endyr']),
         'nbox': str(kwargs['n_mon'])
     }
-    # Base path: directory of the current file (portable and robust)
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # Base path: directory of the current file
+    # Use workdir if given, else default to temp path
+    base_path = workdir if workdir is not None else Path(tempfile.gettempdir())
+    fp = base_path / f"{DLargs [ 'startmon' ]}{DLargs [ 'startyr' ]}_{DLargs [ 'endmon' ]}{DLargs [ 'endyr' ]}_nbox_{DLargs [ 'nbox' ]}_version{version}"
+    fp = fp.with_name(fp.name + ('_anoms.pkl' if anomalies else '_ssts.pkl'))
+    fp.parent.mkdir(parents=True, exist_ok=True)
 
-    # Build the relative path to the data file
-    fp = os.path.join(
-        base_dir,
-        'data','global_data','SST',
-        f"{DLargs [ 'startmon' ]}{DLargs [ 'startyr' ]}_{DLargs [ 'endmon' ]}{DLargs [ 'endyr' ]}_nbox_{DLargs [ 'nbox' ]}_version{version}"
-    )
-
-    # Append suffix based on anomalies flag
-    fp = fp + '_anoms' if anomalies else fp + '_ssts'
     os.makedirs(os.path.dirname(fp), exist_ok=True)
-    
+
     seasonal_var = namedtuple('seasonal_var', ('data', 'lat', 'lon'))
 
     LOGGER.info('New SST field, will save to %s' % fp)

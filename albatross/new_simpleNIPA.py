@@ -177,7 +177,6 @@ class NIPAphase(object):
         if self.corr_grid.mask.sum() >= len(self.sst.lat) * len(self.sst.lon) - 4:
             yhat = np.nan
             e = np.nan
-            # index = self.clim_data.index
             index = self.mei
             hindcast = pd.Series(data=yhat, index=index)
             error = pd.Series(data=e, index=index)
@@ -204,9 +203,6 @@ class NIPAphase(object):
             rawdata = rawSSTdata[:, sstidx]
             cvr = np.cov(rawdata.T)
             eigval, eigvec = np.linalg.eig(cvr)
-            # eigvalsort = np.argsort(eigval)[::-1]
-            # eigval = eigval[eigvalsort]
-            # eigval = np.real(eigval)
             ncomp = 1
             eof_1 = eigvec[
                 :, :ncomp
@@ -228,17 +224,8 @@ class NIPAphase(object):
             rawdata = rawSSTdata[:, sstidx]  #
             dropped_data = droppedSSTdata[:, sstidx].squeeze()
 
-            # U, s, V = np.linalg.svd(rawdata)
-            # pc_1 = V[0,:] #_Rows of V are principal components
-            # eof_1 = U[:,0].squeeze() #_Columns are EOFS
-            # EIGs = s**2 #_s is square root of eigenvalues
-
             cvr = np.cov(rawdata.T)
-            # print cvr.shape
             eigval, eigvec = np.linalg.eig(cvr)
-            # eigvalsort = np.argsort(eigval)[::-1]
-            # eigval = eigval[eigvalsort]
-            # eigval = np.real(eigval)
             ncomp = 1
             eof_1 = eigvec[
                 :, :ncomp
@@ -265,10 +252,6 @@ class NIPAphase(object):
         self.hindcast = hindcast
         self.hindcast_error = error
         self.correlation = round(r, 2)
-        # self.reg_stats = {'params': array(params),
-        #                  'std_errs': array(std_errs),
-        #                  't_vals': array(t_vals),
-        #                  'p_vals': array(p_vals)}
 
         return
 
@@ -276,8 +259,6 @@ class NIPAphase(object):
         from numpy import zeros
         from numpy.random import randint
 
-        # sd = self.hindcast_error.std()
-        # mn = self.hindcast_error.mean()
         n = len(self.hindcast)
         ensemble = zeros((1000, n))
         for i in range(n):
@@ -286,10 +267,3 @@ class NIPAphase(object):
                 ensemble[j, i] = self.hindcast[i] + self.hindcast_error[idx]
         self.ensemble = ensemble
         return
-
-    # def simple_skillscores(self):
-        # n = len(self.clim_data)
-        # lower_ind = n / 3
-        # upper_ind = 2 * n / 3
-
-        # maxima = max(self.clim_data[:lower_ind])
