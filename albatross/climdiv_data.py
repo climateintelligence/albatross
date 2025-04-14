@@ -129,8 +129,6 @@ def create_kwgroups(debug=False, climdata_startyr=1871, n_yrs=145,
         elif slp_months[0] >= 1 and slp_months[-1] > 12:
             slp_startyr = climdata_startyr
             slp_endyr = climdata_endyr
-    #########################################################
-    #########################################################
 
     if debug:
 

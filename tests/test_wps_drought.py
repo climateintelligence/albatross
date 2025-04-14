@@ -11,20 +11,20 @@ print("PyWPS Work Directory:", configuration.get_config_value("server", "workdir
 
 def test_wps_drought():
     """Test the WPS Drought process"""
-
     # Initialize a WPS client with the Drought process
     client = client_for(Service(processes=[Drought()]))
 
     # Correct the input parameters and encode URLs properly
     datainputs_dict = {
-        "indicator": "mei",
-        "start_year": "1971",
-        "end_year": "2018",
+        "pr": "https://raw.githubusercontent.com/climateintelligence/albatross/refs/heads/new_NIPA/albatross/data/E-OBS_precipitation_Como.txt",
+        "indicator": "nao",
+        "start_year": "1952",
+        "end_year": "2023",
         "month": "1,2,3",  # Ensure the correct parameter name
         "phase_mode": "2",
     }
 
-    datainputs = urlencode(datainputs_dict, safe=":/")  # Encode properly
+    datainputs = ";".join(f"{k}={v}" for k, v in datainputs_dict.items())
 
     # Correctly format the request
     response = client.get(

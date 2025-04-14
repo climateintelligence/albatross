@@ -7,7 +7,47 @@ from matplotlib import cm
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
+
 def plot_pc1_vs_true(model, filepath):
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import r2_score
+
+    x = getattr(model, "pc1", None)
+    y = model.clim_data
+
+    if x is None or len(x) != len(y):
+        raise ValueError("PC1 scores are missing or do not align with target data.")
+    slope = model.lin_model.get("slope", None)
+    intercept = model.lin_model.get("intercept", None)
+    y_pred = slope * x + intercept
+    r2 = r2_score(y, y_pred)
+
+    # Plot
+    plt.figure(figsize=(6, 6))
+    plt.scatter(x, y, label="Observed", alpha=0.7)
+    plt.plot(x, y_pred, color="red", label=f"Fit: y = {slope:.2f}x + {intercept:.2f}")
+    plt.xlabel("PC1 (SST)")
+    plt.ylabel("Predictand")
+    plt.title(f"{model.phase} phase\nPC1 vs Predictand")
+
+    # Add R²
+    plt.text(
+        0.95, 0.05,
+        f"$R^2$: {r2:.2f}",
+        transform=plt.gca().transAxes,
+        fontsize=10,
+        verticalalignment="bottom",
+        horizontalalignment="right",
+        bbox=dict(facecolor="white", edgecolor="gray", boxstyle="round,pad=0.5")
+    )
+
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(filepath)
+    plt.close()
+
+
+"""def plot_pc1_vs_true(model, filepath):
 
     from sklearn.metrics import r2_score
     x = model.pc1        # Principal component
@@ -40,7 +80,7 @@ def plot_pc1_vs_true(model, filepath):
     plt.legend()
     plt.tight_layout()
     plt.savefig(filepath)
-    plt.close()
+    plt.close()"""
 
 def make_scatterplot(model, fp):
 

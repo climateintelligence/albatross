@@ -21,10 +21,14 @@ import shutil
 import zipfile
 import os
 from urllib.parse import urlparse
+import requests
 
 
 LOGGER = logging.getLogger("PYWPS")
 FORMAT_PNG = Format("image/png", extension=".png", encoding="base64")
+default_target_file = "E-OBS_precipitation_Como"
+crv_flag = True
+map_flag = True
 
 
 class Drought(Process):
@@ -36,35 +40,35 @@ class Drought(Process):
                 "pr",
                 "Monthly global precipitation file",
                 abstract="text file of precipitation",
-                default="https://github.com/climateintelligence/albatross/blob/new_NIPA/albatross/data/APGD_prcpComo.txt",
+                default=f"https://raw.githubusercontent.com/climateintelligence/albatross/refs/heads/new_NIPA/albatross/data/{default_target_file}",
                 supported_formats=[FORMATS.TEXT],
             ),
 
             LiteralInput(
                 "start_year",
                 "Start Year",
-                default="1971",
+                default="1952",
                 data_type="string",
             ),
             LiteralInput(
                 "end_year",
                 "End Year",
-                default="2008",
+                default="2023",
                 data_type="string",
             ),
 
             LiteralInput(
                 "month",
                 "Forecasted Month",
-                default="1,2,3",  # 👈 Provide multiple months as a comma-separated string
+                default="4,5,6",  # 👈 Provide multiple months as a comma-separated string
                 data_type="string",
             ),
             LiteralInput(
                 "indicator",
                 "Climate Indicator",
-                abstract="Choose between 'nao' or 'mei'",
+                abstract="Choose between 'nao' or 'oni'",
                 data_type="string",
-                allowed_values=[ "nao", "mei" ],
+                allowed_values=[ "nao", 'oni' ],
                 default="nao",
             ),
             LiteralInput(
@@ -145,29 +149,60 @@ class Drought(Process):
         if M not in [ 1, 2 ]:
             raise ValueError("phase_mode must be 1 or 2")
 
-        crv_flag = True
-        map_flag = True
 
         LOGGER.info("Select the input-output files")
 
         indicator = request.inputs [ "indicator" ] [ 0 ].data.lower()
         if indicator=="nao":
             index_file = files("albatross").joinpath("data", "nao.txt")
-        elif indicator=="mei":
-            index_file = files("albatross").joinpath("data", "mei.txt")
+        elif indicator=="oni":
+            index_file = files("albatross").joinpath("data", "oni.txt")
         else:
             raise Exception(f"Unsupported indicator: {indicator}")
 
         pr_input = request.inputs.get("pr", [ None ]) [ 0 ]
 
-        # Handle remote and local references safely
-        # Handle the file input (if provided)
-        if hasattr(pr_input, "file") and pr_input.file:
-            clim_file = Path(pr_input.file)
-            LOGGER.info(f"Loaded climate file from user upload: {clim_file}")
-        else:
-            clim_file = files("albatross").joinpath("data", "APGD_prcpComo.txt")
-            LOGGER.warning(f"Falling back to default climate file: {clim_file}")
+
+        def resolve_precip_input(pr_input, workdir, fallback_file):
+            import requests
+            from pathlib import Path
+
+            if pr_input and hasattr(pr_input, "data") and isinstance(pr_input.data, str) and pr_input.data.startswith(
+                "http"):
+                url = pr_input.data
+                target = Path(workdir) / "downloaded_precip.txt"
+                LOGGER.info(f"Downloading climate data from URL: {url}")
+                try:
+                    r = requests.get(url)
+                    r.raise_for_status()
+                    with open(target, "wb") as out:
+                        out.write(r.content)
+                    return target
+                except Exception as e:
+                    LOGGER.error(f"Failed to download climate data: {e}")
+                    raise
+
+            if hasattr(pr_input, "file") and pr_input.file:
+                path = Path(pr_input.file)
+                with open(path, "r") as f:
+                    first_line = f.readline().strip()
+                    second_line = f.readline().strip()
+
+                if first_line.startswith("http") and not second_line:
+                    url = first_line
+                    target = Path(workdir) / "downloaded_precip.txt"
+                    LOGGER.info(f"Downloading climate data from URL: {url}")
+                    r = requests.get(url)
+                    r.raise_for_status()
+                    with open(target, "wb") as out:
+                        out.write(r.content)
+                    return target
+                else:
+                    return path
+
+            return fallback_file
+
+        clim_file = resolve_precip_input(pr_input, self.workdir, files("albatross").joinpath("data", f"{default_target_file}.txt"))
 
         workdir = Path(self.workdir)
 
@@ -235,18 +270,19 @@ class Drought(Process):
                 fig.savefig(sst_fp)
                 plt.close(fig)
 
-            if not crv_flag and hasattr(model, 'pc1'):
+            if crv_flag and hasattr(model, 'pc1'):
+                # Always generate scatter plot if cross-validation is used
+                scatter_fp = workdir / "scatter_plots" / f"{phase}_scatter.png"
+                make_scatterplot(model, scatter_fp)
+                scatter_files.append(scatter_fp)
+
+            else:
                 # PC1 plotting
                 pc1_plot_fp = workdir / "pc_vs_hindcast" / f"pc1_vs_hindcast.png"
                 plot_pc1_vs_true(model, pc1_plot_fp)
                 pc1 [ 'pc1' ].append(model.pc1)
                 pc1_plot_files.append(pc1_plot_fp)
 
-            if crv_flag:
-                # Always generate scatter plot if cross-validation is used
-                scatter_fp = workdir / "scatter_plots" / f"{phase}_scatter.png"
-                make_scatterplot(model, scatter_fp)
-                scatter_files.append(scatter_fp)
 
         else:
             for phase, ax in zip(phaseind, axes):
@@ -260,24 +296,24 @@ class Drought(Process):
                 timeseries [ 'data' ].append(model.clim_data)
                 timeseries [ 'hindcast' ].append(model.hindcast)
 
-                if not crv_flag and hasattr(model, 'pc1'):
+                if map_flag:
+                    fig, ax, m = sstMap(model, fig=fig, ax=ax)
+                    ax.set_title('%s, %.2f' % (phase, model.correlation))
+                    fig.savefig(sst_fp)
+                    plt.close(fig)
+
+                if crv_flag and hasattr(model, 'pc1'):
+                    # Always generate scatter plot if cross-validation is used
+                    scatter_fp = workdir / "scatter_plots" / f"{phase}_scatter.png"
+                    make_scatterplot(model, scatter_fp)
+                    scatter_files.append(scatter_fp)
+                else:
                     # PC1 plotting
                     pc1_plot_fp = workdir / "pc_vs_hindcast" / f"pc1_vs_hindcast_phase_{phase}.png"
                     plot_pc1_vs_true(model, pc1_plot_fp)
                     pc1 [ 'pc1' ].append(model.pc1)
                     pc1_plot_files.append(pc1_plot_fp)
 
-                if crv_flag:
-                    # Always generate scatter plot if cross-validation is used
-                    scatter_fp = workdir / "scatter_plots" / f"{phase}_scatter.png"
-                    make_scatterplot(model, scatter_fp)
-                    scatter_files.append(scatter_fp)
-
-                if map_flag:
-                    fig, ax, m = sstMap(model, fig=fig, ax=ax)
-                    ax.set_title('%s, %.2f' % (phase, model.correlation))
-                    fig.savefig(sst_fp)
-                    plt.close(fig)
 
         # save timeseries (exceptions handled only for 2 phase analysis)
         if np.size(timeseries [ 'hindcast' ] [ 0 ])==1:
@@ -341,11 +377,6 @@ class Drought(Process):
         # Mark as complete
         response.update_status("Drought process completed successfully!", 100)
 
-        # Local save path
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path.home() / "Desktop" / "wps_outputs" / f"run_{timestamp}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
         # Create ZIP archive
         zip_path = workdir / f"outputs_{indicator}.zip"
         with zipfile.ZipFile(zip_path, "w") as zipf:
@@ -373,9 +404,14 @@ class Drought(Process):
 
         # Assign final ZIP to response
         response.outputs [ "forecast_bundle" ].file = zip_path
+        # Local save path
+        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # output_dir = Path.home() / "Desktop" / "wps_outputs" / f"run_{timestamp}"
+        # output_dir.mkdir(parents=True, exist_ok=True)
 
         # Optionally copy to desktop
-        shutil.copy(zip_path, output_dir / zip_path.name)
-        print(f"Output files copied to: {output_dir}")
+        # shutil.copy(zip_path, output_dir / zip_path.name)
+        # print(f"Output files copied to: {output_dir}")
+
 
         return response

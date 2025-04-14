@@ -2,17 +2,18 @@
 """
 Module for loading atmospheric and oceanic data necessary to run NIPA
 """
-
 import logging
 import os
-from os import environ as EV
+import tempfile
+from pathlib import Path
+import urllib.error
+from pydap.exceptions import ServerError
 
 LOGGER = logging.getLogger("PYWPS")
 
-
-def openDAPsst(version='3b', debug=False, anomalies=True, workdir = None, **kwargs):
+def openDAPsst(version='5', anomalies=True, workdir = None, **kwargs):
     '''
-    # This function downloads data from the new ERSSTv3b on the IRI data library
+    # This function downloads data from the new ERSSTv5 on the IRI data library
     # kwargs should contain: startyr, endyr, startmon, endmon, nbox
     '''
     import pickle
@@ -31,8 +32,6 @@ def openDAPsst(version='3b', debug=False, anomalies=True, workdir = None, **kwar
     if not anomalies:
         SSTurl = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCDC/.ERSST/.version' + version + '/' + \
             '.sst/T/%28startmon%20startyr%29%28endmon%20endyr%29RANGEEDGES/T/nbox/0.0/boxAverage/dods'
-
-    LOGGER.info('Preparing to download from %s' % (SSTurl))
 
     i2m = int_to_month()
 
@@ -56,13 +55,18 @@ def openDAPsst(version='3b', debug=False, anomalies=True, workdir = None, **kwar
     seasonal_var = namedtuple('seasonal_var', ('data', 'lat', 'lon'))
 
     LOGGER.info('New SST field, will save to %s' % fp)
-    LOGGER.info(SSTurl)
+
     for kw in DLargs:
         SSTurl = re.sub(kw, DLargs[kw], SSTurl)
 
+    print(f'SSTurl: {SSTurl}')
     LOGGER.info('Starting download...')
-    LOGGER.info(SSTurl)
-    dataset = open_url(SSTurl)         # Python 3.6 dependency
+
+    try:
+        dataset = open_url(SSTurl)
+    except (ServerError, urllib.error.URLError, Exception) as e:
+        raise RuntimeError(f"❌ Failed to open SST dataset from {SSTurl}: {e}")
+
     arg = 'anom' if anomalies else 'sst'
     sst = dataset[arg]
 
@@ -76,8 +80,7 @@ def openDAPsst(version='3b', debug=False, anomalies=True, workdir = None, **kwar
     # _Grid has shape (ntim, nlat, nlon)
 
     nseasons = 12 / kwargs['n_mon']
-    if debug:
-        LOGGER.info('Number of seasons is %i, number of months is %i' % (nseasons, kwargs['n_mon']))
+
     ntime = len(t)
 
     idx = arange(0, ntime, nseasons).astype(int)
@@ -92,135 +95,26 @@ def openDAPsst(version='3b', debug=False, anomalies=True, workdir = None, **kwar
     return var
 
 
-def load_slp(newFormat=False, debug=False, **kwargs):
-    """
-    This function loads HADSLP2r data.
-    """
-    import pickle
-    from os.path import isfile
-
-    import pandas as pd
-    from netCDF4 import Dataset
-    from numpy import arange, where, zeros
-    from sklearn.preprocessing import scale
-
-    from albatross.utils import int_to_month, slp_tf
-
-    transform = slp_tf()  # This is for transforming kwargs into DLargs
-
-    DLargs = {
-        'startmon': transform[kwargs['months'][0]],
-        'endmon': transform[kwargs['months'][-1]],
-        'startyr': str(kwargs['startyr']),
-        'endyr': str(kwargs['endyr']),
-        'nbox': str(kwargs['n_mon'])
-    }
-    i2m = int_to_month()  # _Use in naming convention
-    fp = EV['DATA'] + '/nipa/SLP/' + i2m[kwargs['months'][0]] + \
-        DLargs['startyr'] + '_' + i2m[kwargs['months'][-1]] + \
-        DLargs['endyr'] + '_nbox_' + DLargs['nbox']
-
-    if isfile(fp):
-        f = open(fp)
-        slpdata = pickle.load(f)
-        f.close()
-        if newFormat:
-            from collections import namedtuple
-            seasonal_var = namedtuple('seasonal_var', ('data', 'lat', 'lon'))
-            slp = seasonal_var(slpdata['grid'], slpdata['lat'], slpdata['lon'])
-            return slp
-        return slpdata
-    LOGGER.info('Creating new SLP pickle from netCDF file')
-
-    # _Next block takes the netCDF file and extracts the time to make
-    # _a time index.
-    nc_fp = EV['DATA'] + '/netCDF/slp.mnmean.real.nc'
-    dat = Dataset(nc_fp)
-    t = dat.variables['time']
-    extractargs = {
-        'start': '1850-01',
-        'periods': len(t[:]),
-        'freq': 'M',
-    }
-    tiindexndex = pd.date_range(**extractargs)
-
-    # Need to get start and end out of time index
-    startyr = kwargs['startyr']
-    startmon = int(DLargs['startmon'])
-
-    idx_start = where((tiindexndex.year == startyr) & (tiindexndex.month == startmon))
-    idx = []
-    [idx.extend(arange(kwargs['n_mon']) + idx_start + 12 * n) for n in range(kwargs['n_year'])]
-
-    """
-    This is how sst open dap does it but doesn't work for this
-    idx = ((tiindexndex.year >= int(DLargs['startyr'])) & \
-            ((tiindexndex.month >= int(DLargs['startmon'])) & \
-             (tiindexndex.month <= int(DLargs['endmon'])))) & \
-                ((tiindexndex.year <= int(DLargs['endyr'])))
-    """
-
-    if debug:
-        LOGGER.info(tiindexndex[idx][:10])
-
-    lat = dat.variables['lat'][:]
-    lon = dat.variables['lon'][:]
-    slp = dat.variables['slp'][:]
-
-    nlat = len(lat)
-    nlon = len(lon)
-    tiindexndex[idx]
-    slpavg = zeros((kwargs['n_year'], nlat, nlon))
-
-    for year, mons in enumerate(idx):
-        slpavg[year] = slp[mons].mean(axis=0)
-        if debug:
-            LOGGER.info('Averaging ', mons)
-
-    # WHERE TO SCALE THE DATA?
-    for i in range(nlat):
-        for j in range(nlon):
-            slpavg[:, i, j] = scale(slpavg[:, i, j])
-    slpdata = {
-        'grid': slpavg,
-        'lat': lat,
-        'lon': lon
-    }
-    f = open(fp, 'w')
-    pickle.dump(slpdata, f)
-    LOGGER.info('SLP data saved to %s' % (fp))
-    f.close()
-    if newFormat:
-        from collections import namedtuple
-        seasonal_var = namedtuple('seasonal_var', ('data', 'lat', 'lon'))
-        slp = seasonal_var(slpdata['grid'], slpdata['lat'], slpdata['lon'])
-        return slp
-    return slpdata
-
-
-def load_clim_file(fp, debug=False):
-    # This function takes a specified input file, and
-    # creates a pandas series with all necessary information
-    # to run NIPA
+def load_clim_file(fp):
     import numpy as np
     import pandas as pd
 
-    print('load_clim_file function with %s' % fp)
+    # First get the description and years from the first two lines
+    with open(fp, "r") as f:
+        description = f.readline().strip()
+        years_line = f.readline().strip()
 
-    # First get the description and years
-    f = open(fp)
-    description = f.readline()
-    years = f.readline()
-    startyr, _ = years[:4], years[5:9]
-    LOGGER.info(description)
+    startyr, _ = years_line[:4], years_line[5:9]  # just use first year
 
-    # First load extended index
+    # Now load actual data (from third line onward)
     data = np.loadtxt(fp, skiprows=2)
-    data.shape[0]
-    data = data.reshape(data.size)  # Make data 1D
-    timeargs = {'start': startyr + '-01',
-                'periods': len(data),
-                'freq': 'M'}
+    data = data.reshape(data.size)  # Make 1D
+
+    timeargs = {
+        'start': startyr + '-01',
+        'periods': len(data),
+        'freq': 'M'
+    }
     index = pd.date_range(**timeargs)
     clim_data = pd.Series(data=data, index=index)
 
@@ -246,56 +140,6 @@ def load_climdata(**kwargs):
         else:
             LOGGER.warning(f"No data available for year {year}, skipping mean calculation.")
     return climdata
-
-
-def create_phase_index(debug=False, **kwargs):
-    # kwargs = kwgroups['index']
-    from numpy import sort
-    index = load_clim_file(kwargs['fp'])
-    from numpy import arange, inf, where, zeros
-
-    from albatross.utils import slp_tf
-    tran = slp_tf()
-    startmon = int(tran[kwargs['months'][0]])
-    startyr = kwargs['startyr']
-    idx_start = where((index.index.year == startyr) & (index.index.month == startmon))
-    idx = []
-    [idx.extend(arange(kwargs['n_mon']) + idx_start + 12 * n) for n in range(kwargs['n_year'])]
-    index_avg = zeros((kwargs['n_year']))
-    for year, mons in enumerate(idx):
-        index_avg[year] = index.values[mons].mean()
-
-    index = sort(index_avg)
-    pos = index[index > 0]
-    neg = index[index < 0]
-    n_el = int(round(len(pos) * 0.34))
-    n_la = int(round(len(neg) * 0.34))
-    n_np = int(len(pos) - n_el)
-    int(len(neg) - n_la)
-
-    cutoffs = {
-        'la': (neg[0], neg[n_la - 1]),
-        'nn': (neg[n_la], neg[-1]),
-        'np': (pos[0], pos[n_np - 1]),
-        'el': (pos[-n_el], pos[-1]),
-        'N': (neg[n_la + 1], pos[n_np - 1])
-    }
-
-    phaseind = {
-        'pos': (index_avg >= cutoffs['el'][0]) & (index_avg <=
-                                                  cutoffs['el'][1]),
-        'neg': (index_avg >= cutoffs['la'][0]) & (index_avg <=
-                                                  cutoffs['la'][1]),
-        'neut': (index_avg >= cutoffs['N'][0]) & (index_avg <=
-                                                  cutoffs['N'][1]),
-        'neutpos': (index_avg >= cutoffs['np'][0]) & (index_avg <=
-                                                      cutoffs['np'][1]),
-        'neutneg': (index_avg >= cutoffs['nn'][0]) & (index_avg <=
-                                                      cutoffs['nn'][1]),
-        'allyears': (index_avg >= -inf)
-    }
-
-    return index_avg, phaseind
 
 
 def create_phase_index2(**kwargs):
