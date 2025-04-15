@@ -37,13 +37,10 @@ class NIPAphase(object):
         self.mei = mei[phaseind]
         self.flags = {}
         self.lin_model = None
-        self.pc1 = None
+        # self.pc1 = None
+        self.pcs = None
         self.correlation = None
         self.hindcast = None
-
-
-
-
         return
 
     def categorize(self, ncat=3, hindcast=False):
@@ -86,9 +83,7 @@ class NIPAphase(object):
         clim_data = self.clim_data
 
         corr_grid = vcorr(X=fieldData, y=clim_data)
-
         n_yrs = len(clim_data)
-
         p_value = sig_test(corr_grid, n_yrs)
 
         # Mask insignificant gridpoints
@@ -112,7 +107,6 @@ class NIPAphase(object):
 
         # INITIALIZE A NEW CORR GRID
         count = np.zeros((nlat, nlon))
-
         dat = clim_data.copy()
 
         for boot in range(ntim):
@@ -120,11 +114,9 @@ class NIPAphase(object):
             idx = np.random.randint(0, len(dat) - 1, len(dat))
             boot_fieldData = np.zeros((len(idx), nlat, nlon))
             boot_fieldData[:] = fieldData[idx]
-            # boot_climData = np.zeros((len(idx)))
             boot_climData = dat[idx]
 
             boot_corr_grid = vcorr(X=boot_fieldData, y=boot_climData)
-
             p_value = sig_test(boot_corr_grid, n_yrs)
 
             count[p_value <= corrlevel] += 1
@@ -136,6 +128,7 @@ class NIPAphase(object):
 
         self.corr_grid = corr_grid
         self.n_pre_grid = nlat * nlon - corr_grid.mask.sum()
+
         if self.n_pre_grid == 0:
             self.flags["noSST"] = True
         else:
@@ -172,8 +165,7 @@ class NIPAphase(object):
 
         return
 
-
-    def crossvalpcr(self, xval=True, k=5, explained_variance_threshold=0.95):
+    def crossvalpcr(self, xval=True, explained_variance_threshold=0.95):
         import numpy as np
         from scipy.stats import pearsonr as corr
         from sklearn.linear_model import LinearRegression
@@ -182,162 +174,126 @@ class NIPAphase(object):
 
         predictand = self.clim_data
 
+        # Check for insufficient SST data
         if self.corr_grid.mask.sum() >= len(self.sst.lat) * len(self.sst.lon) - 4:
             self.flags [ "noSST" ] = True
+            self.hindcast = None
+            self.pcs = None
+            self.lin_model = None
+            self.correlation = None
+            print("Insufficient SST data for PCA regression.")
             return
 
         self.flags [ "noSST" ] = False
         sstidx = ~self.corr_grid.mask
-        n = len(predictand)
-        rawSSTdata = weightsst(self.sst).data [ :, sstidx ]
-
-        yhat = np.zeros(n)
-        models = [ ]
-        pcs_all = np.zeros((n, rawSSTdata.shape [ 1 ]))  # max possible size, will truncate later
+        raw_sst = weightsst(self.sst).data [ :, sstidx ]
+        n_samples = len(predictand)
 
         if not xval:
-            cvr = np.cov(rawSSTdata.T)
-            eigval, eigvec = np.linalg.eig(cvr)
-            eigval = np.real(eigval)
-            eigvec = np.real(eigvec)
+            # Standard PCA regression (no CV)
+            cov_matrix = np.cov(raw_sst.T)
+            eigval, eigvec = np.linalg.eig(cov_matrix)
+            eigval, eigvec = np.real(eigval), np.real(eigvec)
 
-            # Sort eigenvalues and eigenvectors
             sorted_idx = np.argsort(eigval) [ ::-1 ]
-            eigval = eigval [ sorted_idx ]
             eigvec = eigvec [ :, sorted_idx ]
 
             explained_ratio = eigval / eigval.sum()
-            cumulative_variance = np.cumsum(explained_ratio)
-            n_pc = np.searchsorted(cumulative_variance, explained_variance_threshold) + 1
+            cumulative_var = np.cumsum(explained_ratio)
+            n_pc = np.searchsorted(cumulative_var, explained_variance_threshold) + 1
 
             eofs = eigvec [ :, :n_pc ]
-            pcs = rawSSTdata.dot(eofs)
+            pcs = raw_sst.dot(eofs)
 
-            model = LinearRegression().fit(pcs, predictand)
-            yhat = model.predict(pcs)
+            reg = LinearRegression().fit(pcs, predictand)
+            yhat = reg.predict(pcs)
 
-            self.pc1 = pcs [ :, 0 ]  # Save first PC only (for plotting)
+            self.pcs = pcs
             self.hindcast = yhat
             self.correlation = corr(predictand, yhat) [ 0 ]
             self.lin_model = {
                 "eofs": eofs,
-                "regression": model,
+                "regression": reg,
                 "n_pc": n_pc
             }
             return
 
-        # Cross-validation mode
-        kf = KFold(n_splits=k, shuffle=True, random_state=42)
-        for train_idx, test_idx in kf.split(rawSSTdata):
-            X_train, X_test = rawSSTdata [ train_idx ], rawSSTdata [ test_idx ]
+        # Cross-validation PCA regression
+        yhat = np.zeros(n_samples)
+        pcs_all = np.zeros((n_samples, raw_sst.shape [ 1 ]))
+        models = [ ]
+
+        kf = KFold(n_splits=5, shuffle=True, random_state=42)
+
+        for train_idx, test_idx in kf.split(raw_sst):
+            X_train, X_test = raw_sst [ train_idx ], raw_sst [ test_idx ]
             y_train = predictand [ train_idx ]
 
-            cvr = np.cov(X_train.T)
-            eigval, eigvec = np.linalg.eig(cvr)
-            eigval = np.real(eigval)
-            eigvec = np.real(eigvec)
+            cov_matrix = np.cov(X_train.T)
+            eigval, eigvec = np.linalg.eig(cov_matrix)
+            eigval, eigvec = np.real(eigval), np.real(eigvec)
 
             sorted_idx = np.argsort(eigval) [ ::-1 ]
-            eigval = eigval [ sorted_idx ]
             eigvec = eigvec [ :, sorted_idx ]
 
             explained_ratio = eigval / eigval.sum()
-            cumulative_variance = np.cumsum(explained_ratio)
-            n_pc = np.searchsorted(cumulative_variance, explained_variance_threshold) + 1
+            cumulative_var = np.cumsum(explained_ratio)
+            n_pc = np.searchsorted(cumulative_var, explained_variance_threshold) + 1
+
+            if n_pc==0 or np.isnan(eigval [ :n_pc ]).any():
+                continue
 
             eofs = eigvec [ :, :n_pc ]
             pcs_train = X_train.dot(eofs)
             pcs_test = X_test.dot(eofs)
 
-            model = LinearRegression().fit(pcs_train, y_train)
-            preds = model.predict(pcs_test)
+            if pcs_train.shape [ 0 ] < n_pc:
+                continue
+
+            reg = LinearRegression().fit(pcs_train, y_train)
+            preds = reg.predict(pcs_test)
 
             yhat [ test_idx ] = preds
-            pcs_all [ test_idx, :n_pc ] = pcs_test  # fill variable-length PCs
+            pcs_all [ test_idx, :n_pc ] = pcs_test
 
             models.append({
                 "eofs": eofs,
-                "regression": model,
+                "regression": reg,
                 "n_pc": n_pc,
-                "corr": corr(y_train, model.predict(pcs_train)) [ 0 ]
+                "corr": corr(y_train, reg.predict(pcs_train)) [ 0 ]
             })
 
-        r, _ = corr(predictand, yhat)
-
-        self.correlation = round(r, 2)
-        self.hindcast = yhat
-        self.pc1 = pcs_all [ :, 0 ]  # First PC for all samples (approximate)
-        self.lin_model = max(models, key=lambda m: m [ "corr" ])
-
-
-    """def crossvalpcr(self, xval=True, k=5):
-        import numpy as np
-        from scipy.stats import linregress, pearsonr as corr
-        from albatross.utils import weightsst
-
-        predictand = self.clim_data
-
-        if self.corr_grid.mask.sum() >= len(self.sst.lat) * len(self.sst.lon) - 4:
+        if not models:
+            self.hindcast = None
+            self.pcs = None
+            self.lin_model = None
+            self.correlation = None
             self.flags [ "noSST" ] = True
             return
 
-        self.flags [ "noSST" ] = False
-        sstidx = ~self.corr_grid.mask
-        n = len(predictand)
-        rawSSTdata = weightsst(self.sst).data [ :, sstidx ]
-        yhat = np.zeros(n)
-        pc1_full = np.zeros(n)
-        models = [ ]
-
-        if not xval:
-            cvr = np.cov(rawSSTdata.T)
-            eigval, eigvec = np.linalg.eig(cvr)
-            eof_1 = np.real(eigvec [ :, 0 ])
-            pc_1 = eof_1.T.dot(rawSSTdata.T).squeeze()
-            slope, intercept, r, p, err = linregress(pc_1, predictand)
-            self.pc1 = pc_1
-            self.correlation = r
-            self.hindcast = slope * pc_1 + intercept
-            self.lin_model = {
-                "eof_1": eof_1,
-                "slope": slope,
-                "intercept": intercept,
-                "corr": r
-            }
-            return
-
-        kf = KFold(n_splits=k, shuffle=True, random_state=42)
-
-        for train_idx, test_idx in kf.split(rawSSTdata):
-            X_train, X_test = rawSSTdata [ train_idx ], rawSSTdata [ test_idx ]
-            y_train = predictand [ train_idx ]
-
-            cvr = np.cov(X_train.T)
-            eigval, eigvec = np.linalg.eig(cvr)
-            eof_1 = np.real(eigvec [ :, 0 ])
-            pc_1 = eof_1.T.dot(X_train.T).squeeze()
-
-            slope, intercept, r_value, p_value, std_err = linregress(pc_1, y_train)
-
-            # Predict test
-            preds = X_test.dot(eof_1) * slope + intercept
-            yhat [ test_idx ] = preds
-            pc1_full [ test_idx ] = X_test.dot(eof_1)
-
-            models.append({
-                "eof_1": eof_1,
-                "slope": slope,
-                "intercept": intercept,
-                "corr": r_value
-            })
-
-        r, _ = corr(predictand, yhat)
-
-        self.correlation = round(r, 2)
+        # Store hindcast from CV
         self.hindcast = yhat
-        self.pc1 = pc1_full
+        self.correlation = corr(predictand, yhat) [ 0 ]
 
-        # Pick best model based on correlation
-        best_idx = np.argmax([ m [ "corr" ] for m in models ])
-        self.lin_model = models [ best_idx ]"""
+        # Select best number of PCs from CV and refit on all data
+        best_model = max(models, key=lambda m: m [ "corr" ])
+        n_pc_best = best_model [ "n_pc" ]
 
+        # Refit on full dataset using best number of PCs
+        cov_matrix = np.cov(raw_sst.T)
+        eigval, eigvec = np.linalg.eig(cov_matrix)
+        eigval, eigvec = np.real(eigval), np.real(eigvec)
+
+        sorted_idx = np.argsort(eigval) [ ::-1 ]
+        eigvec = eigvec [ :, sorted_idx ]
+
+        eofs = eigvec [ :, :n_pc_best ]
+        pcs_full = raw_sst.dot(eofs)
+        reg_full = LinearRegression().fit(pcs_full, predictand)
+
+        self.pcs = pcs_full
+        self.lin_model = {
+            "eofs": eofs,
+            "regression": reg_full,
+            "n_pc": n_pc_best
+        }

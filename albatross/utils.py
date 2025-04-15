@@ -8,117 +8,43 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
-def plot_pc1_vs_true(model, filepath):
+def plot_model_results(model, filepath, crv_flag=True):
     import matplotlib.pyplot as plt
     from sklearn.metrics import r2_score
 
-    x = getattr(model, "pc1", None)
     y = model.clim_data
+    X = model.pcs
+    reg = model.lin_model["regression"]
+    y_pred = reg.predict(X)
 
-    if x is None or len(x) != len(y):
-        raise ValueError("PC1 scores are missing or do not align with target data.")
-    slope = model.lin_model.get("slope", None)
-    intercept = model.lin_model.get("intercept", None)
-    y_pred = slope * x + intercept
-    r2 = r2_score(y, y_pred)
+    coef_str = " + ".join(f"{coef:.2f}·PC{i+1}" for i, coef in enumerate(reg.coef_))
+    equation_str = f"y = {coef_str} + {reg.intercept_:.2f}"
 
-    # Plot
+    title_prefix = "Multivariate Regression" if crv_flag else "Hindcast (Full Fit)"
+    title = f"{getattr(model, 'phase', 'Unknown')} Phase\n{title_prefix}"
+    footer = f"{equation_str}\n$R^2$: {r2_score(y, y_pred):.2f}"
+    label = "Regression Line"
+
+    # Create plot
     plt.figure(figsize=(6, 6))
-    plt.scatter(x, y, label="Observed", alpha=0.7)
-    plt.plot(x, y_pred, color="red", label=f"Fit: y = {slope:.2f}x + {intercept:.2f}")
-    plt.xlabel("PC1 (SST)")
-    plt.ylabel("Predictand")
-    plt.title(f"{model.phase} phase\nPC1 vs Predictand")
+    plt.scatter(y, y_pred, alpha=0.7, label="Observed vs Predicted")
+    plt.plot([min(y), max(y)], [min(y), max(y)], "r--", label=label)
+    plt.xlabel("Observed Precipitation")
+    plt.ylabel("Predicted Precipitation")
+    plt.title(title)
 
-    # Add R²
-    plt.text(
-        0.95, 0.05,
-        f"$R^2$: {r2:.2f}",
-        transform=plt.gca().transAxes,
+    plt.figtext(
+        0.5, -0.12, footer,
+        wrap=True,
+        horizontalalignment="center",
         fontsize=10,
-        verticalalignment="bottom",
-        horizontalalignment="right",
         bbox=dict(facecolor="white", edgecolor="gray", boxstyle="round,pad=0.5")
     )
 
     plt.legend()
-    plt.tight_layout()
-    plt.savefig(filepath)
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
+    plt.savefig(filepath, bbox_inches="tight")
     plt.close()
-
-
-"""def plot_pc1_vs_true(model, filepath):
-
-    from sklearn.metrics import r2_score
-    x = model.pc1        # Principal component
-    y = model.clim_data   # Hindcast values
-
-    # Fit linear regression
-    slope, intercept = np.polyfit(x, y, 1)
-    y_pred = slope * x + intercept
-    r2 = r2_score(y, y_pred)
-
-    # Plot
-    plt.figure(figsize=(6, 6))
-    plt.scatter(x, y, label="Data points", alpha=0.7)
-    plt.plot(x, y_pred, color="red", label=f"y = {slope:.2f}x + {intercept:.2f}")
-    plt.xlabel("PC1 (SST)")
-    plt.ylabel("Hindcast")
-    plt.title(f"{model.phase} phase\nPC1 vs Hindcast")
-
-    # Add R² to corner
-    metrics_text = f"$R^2$: {r2:.2f}"
-    plt.text(
-        0.95, 0.05, metrics_text,
-        transform=plt.gca().transAxes,
-        fontsize=10,
-        verticalalignment="bottom",
-        horizontalalignment="right",
-        bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round,pad=0.5')
-    )
-
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(filepath)
-    plt.close()"""
-
-def make_scatterplot(model, fp):
-
-    from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
-    x = model.clim_data      # true values (observed)
-    y = model.hindcast       # predicted values (hindcast)
-
-    # Calculate metrics
-    r2 = r2_score(x, y)
-    mae = mean_absolute_error(x, y)
-    mse = mean_squared_error(x, y)
-    rmse = np.sqrt(mse)
-
-    # Plot
-    plt.figure(figsize=(6, 6))
-    plt.scatter(x, y, alpha=0.7, label="Data points")
-    # add line of best fit
-    plt.plot([x.min(), x.max()], [x.min(), x.max()], 'r--', lw=2, label='Perfect fit')
-    plt.xlabel("Observed")
-    plt.ylabel("Hindcast")
-    plt.title(f"{model.phase} phase")
-    plt.grid(True)
-
-    # Add metrics text box
-    metrics_text = f"$R^2$: {r2:.2f}\nMAE: {mae:.2f}\nRMSE: {rmse:.2f}"
-    plt.text(
-        0.8, 0.15,  # ⬅️ bottom-right corner in axes coordinates
-        metrics_text,
-        transform=plt.gca().transAxes,
-        fontsize=10,
-        verticalalignment="top",
-        bbox=dict(facecolor='white', edgecolor='gray', boxstyle='round,pad=0.5')
-    )
-    plt.legend(loc="best")
-    plt.tight_layout()
-    plt.savefig(fp)
-    plt.close()
-
 
 def weightsst(sst):
     # SST needs to be downloaded using the openDAPsst function
@@ -127,7 +53,6 @@ def weightsst(sst):
     for i, weight in enumerate(weights):
         sst.data[:, i, :] *= weight
     return sst
-
 
 def sig_test(r, n, twotailed=True):
     import numpy as np
@@ -141,7 +66,6 @@ def sig_test(r, n, twotailed=True):
     if twotailed:
         p = p * 2
     return p
-
 
 def vcorr(X, y):
     # Function to correlate a single time series with a gridded data field
@@ -164,7 +88,6 @@ def vcorr(X, y):
         r = r.reshape(nlat, nlon)
 
     return r
-
 
 def int_to_month():
     """
@@ -198,7 +121,6 @@ def int_to_month():
     }
     return i2m
 
-
 def slp_tf():
     d = {
         -4: '08',
@@ -224,7 +146,6 @@ def slp_tf():
     }
     return d
 
-
 def meteo_swiss_convert(f_in, f_out):
     data = np.loadtxt(f_in, skiprows=28)
     years = data[:, 0]
@@ -245,7 +166,6 @@ def meteo_swiss_convert(f_in, f_out):
         np.savetxt(f, array, fmt=fmtstr)
 
     return
-
 
 def sstMap(nipaPhase, cmap=cm.jet, fig=None, ax=None):
     from mpl_toolkits.basemap import Basemap

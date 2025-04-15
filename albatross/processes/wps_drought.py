@@ -9,7 +9,7 @@ from pywps.app.Common import Metadata
 # drought specific functions
 from albatross.climdiv_data import get_data, create_kwgroups
 from albatross.new_simpleNIPA import NIPAphase
-from albatross.utils import sstMap, make_scatterplot, plot_pc1_vs_true
+from albatross.utils import sstMap, plot_model_results
 
 # NIPA specific imports
 import matplotlib.pyplot as plt
@@ -26,7 +26,7 @@ import requests
 
 LOGGER = logging.getLogger("PYWPS")
 FORMAT_PNG = Format("image/png", extension=".png", encoding="base64")
-default_target_file = "E-OBS_precipitation_Como"
+default_target_file = "APGD_prcpComo"
 crv_flag = True
 map_flag = True
 
@@ -47,13 +47,13 @@ class Drought(Process):
             LiteralInput(
                 "start_year",
                 "Start Year",
-                default="1952",
+                default="1971",
                 data_type="string",
             ),
             LiteralInput(
                 "end_year",
                 "End Year",
-                default="2023",
+                default="2018",
                 data_type="string",
             ),
 
@@ -105,8 +105,8 @@ class Drought(Process):
                 supported_formats=[FORMAT_PNG],
             ),
             ComplexOutput(
-                "pc1_plot",
-                "PC1 vs Hindcast Plot",
+                "pcs_plot",
+                "Predicted vs Observed (PCA regression)",
                 as_reference=True,
                 supported_formats=[ FORMAT_PNG ],
             )
@@ -245,11 +245,11 @@ class Drought(Process):
 
         fig, axes = plt.subplots(M, 1, figsize=(6, 12))
         timeseries = {'years': [ ], 'data': [ ], 'hindcast': [ ]}
-        pc1 = {'pc1': [ ]}
+        # pc1 = {'pc1': [ ]}
         scatter_fp = None
         scatter_files = []
         pc1_plot_fp = None
-        pc1_plot_files = []
+        pcs_plot_files = []
 
         print('NIPA running...')
         if M==1:
@@ -270,19 +270,10 @@ class Drought(Process):
                 fig.savefig(sst_fp)
                 plt.close(fig)
 
-            if crv_flag and hasattr(model, 'pc1'):
-                # Always generate scatter plot if cross-validation is used
-                scatter_fp = workdir / "scatter_plots" / f"{phase}_scatter.png"
-                make_scatterplot(model, scatter_fp)
-                scatter_files.append(scatter_fp)
 
-            else:
-                # PC1 plotting
-                pc1_plot_fp = workdir / "pc_vs_hindcast" / f"pc1_vs_hindcast.png"
-                plot_pc1_vs_true(model, pc1_plot_fp)
-                pc1 [ 'pc1' ].append(model.pc1)
-                pc1_plot_files.append(pc1_plot_fp)
-
+            scatter_fp = workdir / "scatter_plots" / f"{phase}.png"
+            plot_model_results(model, scatter_fp, crv_flag=crv_flag)
+            scatter_files.append(scatter_fp)
 
         else:
             for phase, ax in zip(phaseind, axes):
@@ -298,21 +289,15 @@ class Drought(Process):
 
                 if map_flag:
                     fig, ax, m = sstMap(model, fig=fig, ax=ax)
-                    ax.set_title('%s, %.2f' % (phase, model.correlation))
+                    ax.set_title(
+                        '%s, %s' % (phase, f"{model.correlation:.2f}" if model.correlation is not None else "N/A"))
+                    # ax.set_title('%s, %.2f' % (phase, model.correlation))
                     fig.savefig(sst_fp)
                     plt.close(fig)
 
-                if crv_flag and hasattr(model, 'pc1'):
-                    # Always generate scatter plot if cross-validation is used
-                    scatter_fp = workdir / "scatter_plots" / f"{phase}_scatter.png"
-                    make_scatterplot(model, scatter_fp)
-                    scatter_files.append(scatter_fp)
-                else:
-                    # PC1 plotting
-                    pc1_plot_fp = workdir / "pc_vs_hindcast" / f"pc1_vs_hindcast_phase_{phase}.png"
-                    plot_pc1_vs_true(model, pc1_plot_fp)
-                    pc1 [ 'pc1' ].append(model.pc1)
-                    pc1_plot_files.append(pc1_plot_fp)
+                scatter_fp = workdir / "scatter_plots" / f"{phase}.png"
+                plot_model_results(model, scatter_fp, crv_flag=crv_flag)
+                scatter_files.append(scatter_fp)
 
 
         # save timeseries (exceptions handled only for 2 phase analysis)
@@ -359,14 +344,15 @@ class Drought(Process):
         else:
             LOGGER.warning("No scatter plots were generated.")
 
-        if pc1_plot_files:
-            selected_plot = pc1_plot_files [ 0 ]
+        if pcs_plot_files:
+            selected_plot = pcs_plot_files [ 0 ]
             if selected_plot.exists():
-                response.outputs [ "pc1_plot" ].file = selected_plot
+                # response.outputs [ "pc1_plot" ].file = selected_plot
+                response.outputs [ "pcs_plot" ].file = selected_plot
             else:
-                LOGGER.warning(f"PC1 plot file {selected_plot} not found.")
+                LOGGER.warning(f"PC plot file {selected_plot} not found.")
         else:
-            LOGGER.warning("No PC1 plots were generated.")
+            LOGGER.warning("No PC plots were generated.")
 
         # SST map
         if sst_fp.exists():
@@ -392,9 +378,9 @@ class Drought(Process):
                     zipf.write(scatter_plot, arcname=scatter_plot.name)
 
             # Write all pc1_vs_hindcast plots
-            for pc1_plot in pc1_plot_files:
-                if pc1_plot.exists():
-                    zipf.write(pc1_plot, arcname=pc1_plot.name)
+            for pcs_plot in pcs_plot_files:
+                if pcs_plot.exists():
+                    zipf.write(pcs_plot, arcname=pcs_plot.name)
 
             # Extra: phase-specific scatter plots
             for phase in phaseind:
@@ -412,6 +398,5 @@ class Drought(Process):
         # Optionally copy to desktop
         # shutil.copy(zip_path, output_dir / zip_path.name)
         # print(f"Output files copied to: {output_dir}")
-
 
         return response
