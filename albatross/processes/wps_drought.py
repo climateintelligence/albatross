@@ -53,7 +53,7 @@ class Drought(Process):
             LiteralInput(
                 "end_year",
                 "End Year",
-                default="2018",
+                default="2008",
                 data_type="string",
             ),
 
