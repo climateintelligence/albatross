@@ -40,7 +40,7 @@ class Drought(Process):
                 "pr",
                 "Monthly global precipitation file",
                 abstract="text file of precipitation",
-                default=f"https://raw.githubusercontent.com/climateintelligence/albatross/refs/heads/new_NIPA/albatross/data/{default_target_file}",
+                default=f"https://raw.githubusercontent.com/climateintelligence/albatross/refs/heads/new_NIPA/albatross/data/{default_target_file}.txt",
                 supported_formats=[FORMATS.TEXT],
             ),
 
@@ -229,7 +229,6 @@ class Drought(Process):
             index_fp=index_file,
             climdata_fp=clim_file,
         )
-
 
         # Years goes from start year to end year
         years = np.arange(startyr, endyr + 1)

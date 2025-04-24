@@ -94,7 +94,6 @@ def openDAPsst(version='5', anomalies=True, workdir = None, **kwargs):
     f.close()
     return var
 
-
 def load_clim_file(fp):
     import numpy as np
     import pandas as pd
@@ -119,7 +118,6 @@ def load_clim_file(fp):
     clim_data = pd.Series(data=data, index=index)
 
     return clim_data
-
 
 def load_climdata(**kwargs):
 
