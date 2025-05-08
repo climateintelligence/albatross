@@ -1,16 +1,15 @@
-name: albatross
+name: nipa_env
 channels:
-- conda-forge
-- defaults
+  - conda-forge
+  - defaults
+  - anaconda
 dependencies:
-- pip
-- python>=3.10
-- pywps>=4.5.2,<4.7
-- jinja2
-- click
-- psutil
-- pandas
-- matplotlib-base
-- pydap
-# tests
-- pytest
+  - python=3.11
+  - pytest=8.3.5
+  - pydap
+  - numpy
+  - pandas
+  - matplotlib
+  - pip
+  - pip:
+      - -r file:requirements.txt

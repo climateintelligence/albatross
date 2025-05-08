@@ -1,12 +1,15 @@
-from pywps import Process, LiteralInput, LiteralOutput, UOM
+import logging
+
+from pywps import UOM, LiteralInput, LiteralOutput, Process
 from pywps.app.Common import Metadata
 
-import logging
+
 LOGGER = logging.getLogger("PYWPS")
 
 
 class SayHello(Process):
     """A nice process saying 'hello'."""
+
     def __init__(self):
         inputs = [
             LiteralInput('name', 'Your name',
