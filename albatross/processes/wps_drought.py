@@ -350,12 +350,12 @@ class Drought(Process):
                 if len(scatter_files)==1:
                     axs = [ axs ]  # Ensure axs is iterable if only one
 
-                for i, scatter in enumerate(scatter_files):
+                for ax, phase, scatter in zip(axs, phaseind, scatter_files):
                     if scatter.exists():
                         img = plt.imread(scatter)
-                        axs [ i ].imshow(img)
-                        axs [ i ].axis("off")
-                        axs [ i ].set_title(phaseind [ i ])
+                        ax.imshow(img)
+                        ax.axis("off")
+                        ax.set_title(phase)
                     else:
                         LOGGER.warning(f"Scatter plot {scatter} does not exist.")
 
