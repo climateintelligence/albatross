@@ -335,11 +335,38 @@ class Drought(Process):
 
         # Only assign scatter plot if any were generated
         if scatter_files:
-            scatter_fp = scatter_files [ 0 ]
-            if scatter_fp.exists():
-                response.outputs [ "scatter_plot" ].file = scatter_fp
+            if M==1:
+                # Single-phase mode: just return the only plot
+                scatter_fp = scatter_files [ 0 ]
+                if scatter_fp.exists():
+                    response.outputs [ "scatter_plot" ].file = scatter_fp
+                else:
+                    LOGGER.warning(f"Scatter plot file {scatter_fp} does not exist!")
             else:
-                LOGGER.warning(f"Scatter plot file {scatter_fp} does not exist!")
+                # Two-phase mode: combine both scatter plots side-by-side
+                combined_fp = workdir / "scatter_plots" / "combined_scatter.png"
+                fig, axs = plt.subplots(1, len(scatter_files), figsize=(12, 6))
+
+                if len(scatter_files)==1:
+                    axs = [ axs ]  # Ensure axs is iterable if only one
+
+                for i, scatter in enumerate(scatter_files):
+                    if scatter.exists():
+                        img = plt.imread(scatter)
+                        axs [ i ].imshow(img)
+                        axs [ i ].axis("off")
+                        axs [ i ].set_title(phaseind [ i ])
+                    else:
+                        LOGGER.warning(f"Scatter plot {scatter} does not exist.")
+
+                plt.tight_layout()
+                fig.savefig(combined_fp)
+                plt.close(fig)
+
+                if combined_fp.exists():
+                    response.outputs [ "scatter_plot" ].file = combined_fp
+                else:
+                    LOGGER.warning("Combined scatter plot could not be created.")
         else:
             LOGGER.warning("No scatter plots were generated.")
 
@@ -389,13 +416,5 @@ class Drought(Process):
 
         # Assign final ZIP to response
         response.outputs [ "forecast_bundle" ].file = zip_path
-        # Local save path
-        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # output_dir = Path.home() / "Desktop" / "wps_outputs" / f"run_{timestamp}"
-        # output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Optionally copy to desktop
-        # shutil.copy(zip_path, output_dir / zip_path.name)
-        # print(f"Output files copied to: {output_dir}")
 
         return response
