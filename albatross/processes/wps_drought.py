@@ -400,13 +400,4 @@ class Drought(Process):
         # Assign final ZIP to response
         response.outputs [ "forecast_bundle" ].file = zip_path
 
-        # Copy outputs to local Desktop
-        try:
-            desktop = Path.home() / "Desktop"
-            dest_folder = desktop / f"outputs_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            shutil.copytree(workdir, dest_folder)
-            LOGGER.info(f"Outputs copied to desktop folder: {dest_folder}")
-        except Exception as e:
-            LOGGER.warning(f"Failed to copy outputs to Desktop: {e}")
-
         return response
