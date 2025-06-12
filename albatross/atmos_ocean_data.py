@@ -46,15 +46,8 @@ def openDAPsst(version='5', anomalies=True, workdir = None, **kwargs):
     # Base path: directory of the current file
     # Use workdir if given, else default to temp path
     base_path = workdir if workdir is not None else Path(tempfile.gettempdir())
-    fp = base_path / f"{DLargs [ 'startmon' ]}{DLargs [ 'startyr' ]}_{DLargs [ 'endmon' ]}{DLargs [ 'endyr' ]}_nbox_{DLargs [ 'nbox' ]}_version{version}"
-    fp = fp.with_name(fp.name + ('_anoms.pkl' if anomalies else '_ssts.pkl'))
-    fp.parent.mkdir(parents=True, exist_ok=True)
-
-    os.makedirs(os.path.dirname(fp), exist_ok=True)
 
     seasonal_var = namedtuple('seasonal_var', ('data', 'lat', 'lon'))
-
-    LOGGER.info('New SST field, will save to %s' % fp)
 
     for kw in DLargs:
         SSTurl = re.sub(kw, DLargs[kw], SSTurl)
@@ -89,9 +82,6 @@ def openDAPsst(version='5', anomalies=True, workdir = None, **kwargs):
     sstdata = {'grid': sst, 'lat': sstlat, 'lon': sstlon}
     var = seasonal_var(sst, sstlat, sstlon)
 
-    f = open(fp, 'wb')
-    pickle.dump(sstdata, f, pickle.HIGHEST_PROTOCOL)
-    f.close()
     return var
 
 def load_clim_file(fp):

@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
-def plot_model_results(model, filepath, crv_flag=True):
+def plot_model_results(model, filepath=None, crv_flag=True, ax=None):
     import matplotlib.pyplot as plt
     from sklearn.metrics import r2_score
 
@@ -25,26 +25,30 @@ def plot_model_results(model, filepath, crv_flag=True):
     footer = f"{equation_str}\n$R^2$: {r2_score(y, y_pred):.2f}"
     label = "Regression Line"
 
-    # Create plot
-    plt.figure(figsize=(6, 6))
-    plt.scatter(y, y_pred, alpha=0.7, label="Observed vs Predicted")
-    plt.plot([min(y), max(y)], [min(y), max(y)], "r--", label=label)
-    plt.xlabel("Observed Precipitation")
-    plt.ylabel("Predicted Precipitation")
-    plt.title(title)
+    show_plot = False
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 6))
+        show_plot = True
 
-    plt.figtext(
-        0.5, -0.12, footer,
-        wrap=True,
-        horizontalalignment="center",
-        fontsize=10,
-        bbox=dict(facecolor="white", edgecolor="gray", boxstyle="round,pad=0.5")
-    )
+    ax.scatter(y, y_pred, alpha=0.7, label="Observed vs Predicted")
+    ax.plot([min(y), max(y)], [min(y), max(y)], "r--", label=label)
+    ax.set_xlabel("Observed Precipitation")
+    ax.set_ylabel("Predicted Precipitation")
+    ax.set_title(title)
+    ax.legend()
 
-    plt.legend()
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
-    plt.savefig(filepath, bbox_inches="tight")
-    plt.close()
+    if show_plot:
+        fig.text(
+            0.5, 0.01, footer,
+            wrap=True,
+            horizontalalignment="center",
+            fontsize=10,
+            bbox=dict(facecolor="white", edgecolor="gray", boxstyle="round,pad=0.5")
+        )
+        plt.tight_layout(rect=[0, 0.08, 1, 1])
+        if filepath:
+            fig.savefig(filepath, bbox_inches="tight")
+        plt.close()
 
 def weightsst(sst):
     # SST needs to be downloaded using the openDAPsst function
@@ -195,3 +199,26 @@ def sstMap(nipaPhase, cmap=cm.jet, fig=None, ax=None):
     cax = divider.append_axes('bottom', size='5%', pad=0.05)
     fig.colorbar(im1, cax=cax, orientation='horizontal')
     return fig, ax, m
+
+def append_model_pcs(model, pcs_file_rows):
+    """
+    Extracts PCs and hindcasts from a NIPAphase model and appends rows to the given list.
+
+    Parameters:
+    -----------
+    model : NIPAphase
+        Fitted NIPAphase model containing .pcs, .hindcast, .years, and .phase.
+    pcs_file_rows : list of dict
+        List to append extracted rows to. Each row is a dict with year, phase, hindcast, and PCs.
+    """
+    if model.pcs is not None and model.hindcast is not None:
+        n_pc = model.pcs.shape[1]
+        for i in range(len(model.years)):
+            row = {
+                "year": int(model.years[i]),
+                "phase": model.phase,
+                "hindcast": float(model.hindcast[i]),
+            }
+            for pc_idx in range(n_pc):
+                row[f"PC{pc_idx + 1}"] = float(model.pcs[i, pc_idx])
+            pcs_file_rows.append(row)
