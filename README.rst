@@ -15,9 +15,8 @@ Albatross
     :alt: GitHub license
 
 Albatross (the bird)
-  *Albatross is a bird ...*
+  *Albatross is a bird tailored for seasonal precipitation forecasting. It leverages on Sea Surface Temperature and teleconnection patterns—large-scale climate anomalies like El Niño (ENSO) and the North Atlantic Oscillation (NAO)-to enhance predictive skill.*
 
-A climate resiliance application package for drought assessment.
 
 Documentation
 -------------
