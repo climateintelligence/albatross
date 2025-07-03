@@ -92,8 +92,8 @@ class NIPAphase(object):
         # Mask land
         corr_grid = ma.masked_array(corr_grid, isnan(corr_grid))
         # Mask northern/southern ocean
-        corr_grid.mask[self.sst.lat > 80] = True
-        corr_grid.mask[self.sst.lat < -80] = True
+        corr_grid.mask[self.sst.lat > 60] = True
+        corr_grid.mask[self.sst.lat < -60] = True
         nlat = len(self.sst.lat)
         nlon = len(self.sst.lon)
 
