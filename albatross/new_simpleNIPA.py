@@ -7,6 +7,7 @@ from collections import namedtuple
 from sklearn.model_selection import KFold
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 seasonal_var = namedtuple("seasonal_var", ("data", "lat", "lon"))
 
@@ -91,8 +92,8 @@ class NIPAphase(object):
         # Mask land
         corr_grid = ma.masked_array(corr_grid, isnan(corr_grid))
         # Mask northern/southern ocean
-        corr_grid.mask[self.sst.lat > 60] = True
-        corr_grid.mask[self.sst.lat < -60] = True
+        corr_grid.mask[self.sst.lat > 80] = True
+        corr_grid.mask[self.sst.lat < -80] = True
         nlat = len(self.sst.lat)
         nlon = len(self.sst.lon)
 
@@ -297,3 +298,41 @@ class NIPAphase(object):
             "regression": reg_full,
             "n_pc": n_pc_best
         }
+
+    def save_regressor(self, workdir):
+        """
+        Save EOFs and regression coefficients to CSV files.
+        This saves:
+        - Principal component patterns (EOFs)
+        - Regression coefficients (including intercept)
+        """
+        if not self.lin_model:
+            print("⚠️ No regression model found. Skipping save.")
+            return
+
+        # Unpack model
+        eofs = self.lin_model [ "eofs" ]
+        reg = self.lin_model [ "regression" ]
+        n_pc = self.lin_model [ "n_pc" ]
+
+        # Ensure output folder exists
+        out_dir = Path(workdir) / "pc_vs_hindcast"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save EOFs (PC weights)
+        eofs_df = pd.DataFrame(eofs, columns=[ f"PC{i + 1}" for i in range(n_pc) ])
+        eofs_path = out_dir / f"eofs_{self.phase}.csv"
+        eofs_df.to_csv(eofs_path, index=False)
+
+        # Save regression coefficients and intercept
+        coef_df = pd.DataFrame({
+            "Coefficient": reg.coef_,
+        }, index=[ f"PC{i + 1}" for i in range(n_pc) ])
+        coef_df.loc [ "Intercept" ] = reg.intercept_
+        coef_path = out_dir / f"coefficients_{self.phase}.csv"
+        coef_df.to_csv(coef_path)
+
+        # Inside save_regressor
+        mask_path = Path(workdir) / "pc_vs_hindcast" / f"sst_mask_{self.phase}.npy"
+        np.save(mask_path, self.corr_grid.mask)
+

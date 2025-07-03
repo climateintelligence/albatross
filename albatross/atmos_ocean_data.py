@@ -129,7 +129,6 @@ def load_climdata(**kwargs):
             LOGGER.warning(f"No data available for year {year}, skipping mean calculation.")
     return climdata
 
-
 def create_phase_index2(**kwargs):
     from copy import deepcopy
 

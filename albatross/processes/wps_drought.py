@@ -23,13 +23,11 @@ import os
 from urllib.parse import urlparse
 import requests
 
-
 LOGGER = logging.getLogger("PYWPS")
 FORMAT_PNG = Format("image/png", extension=".png", encoding="base64")
 default_target_file = "APGD_prcpComo"
 crv_flag = True
 map_flag = True
-
 
 class Drought(Process):
     """A process to forecast precipitation."""
@@ -43,7 +41,6 @@ class Drought(Process):
                 default=f"https://raw.githubusercontent.com/climateintelligence/albatross/main/albatross/data/{default_target_file}.txt",
                 supported_formats=[FORMATS.TEXT],
             ),
-
             LiteralInput(
                 "start_year",
                 "Start Year",
@@ -56,20 +53,19 @@ class Drought(Process):
                 default="2008",
                 data_type="string",
             ),
-
             LiteralInput(
                 "month",
-                "Forecasted Month",
+                "Target season",
                 default="4,5,6",  # 👈 Provide multiple months as a comma-separated string
                 data_type="string",
             ),
             LiteralInput(
                 "indicator",
                 "Climate Indicator",
-                abstract="Choose between 'nao' or 'oni'",
+                abstract="Choose between 'NAO', 'ONI', 'QBO','EAWR','WP', or 'PNA'",
                 data_type="string",
-                allowed_values=[ "nao", 'oni' ],
-                default="nao",
+                allowed_values=[ 'NAO', 'ONI', 'QBO','EAWR','WP', 'PNA' ],
+                default="NAO",
             ),
             LiteralInput(
                 "phase_mode",
@@ -233,7 +229,6 @@ class Drought(Process):
 
         # Years goes from start year to end year
         years = np.arange(startyr, endyr + 1)
-
         workdir = Path(self.workdir)
 
         # Run Model
@@ -247,7 +242,7 @@ class Drought(Process):
         pcs_file_rows = [ ]
         scatter_files = []
         timeseries_rows = []
-        pcs_plot_files = []
+
 
         if M==1:
             phase = 'allyears'
@@ -265,6 +260,8 @@ class Drought(Process):
                     "phase": model.phase  # Optional: drop this if not needed
                 })
 
+            model.save_regressor(workdir)
+
             if map_flag:
                 fig, axes, m = sstMap(model, fig=fig, ax=axes)
                 axes.set_title('%s, %.2f' % (phase, model.correlation))
@@ -275,6 +272,7 @@ class Drought(Process):
             plot_model_results(model, scatter_fp, crv_flag=crv_flag)
             scatter_files.append(scatter_fp)
             append_model_pcs(model, pcs_file_rows)
+            print(f"✔ pcs_file_rows contains {len(pcs_file_rows)} rows")
 
             df = pd.DataFrame(timeseries_rows).sort_values("year")
             df.to_csv(ts_file, index=False)
@@ -287,6 +285,7 @@ class Drought(Process):
                 model.bootcorr(corrconf=0.95)
                 model.gridCheck()
                 model.crossvalpcr(xval=crv_flag)
+                model.save_regressor(workdir)
                 for i in range(len(model.years)):
                     timeseries_rows.append({
                         "year": int(model.years [ i ]),
@@ -305,6 +304,7 @@ class Drought(Process):
 
                 scatter_files.append((model, phase))
                 append_model_pcs(model, pcs_file_rows)
+                print(f"✔ pcs_file_rows contains {len(pcs_file_rows)} rows")
 
                 df = pd.DataFrame(timeseries_rows).sort_values("year")
                 df.to_csv(ts_file, index=False)
@@ -355,16 +355,6 @@ class Drought(Process):
         else:
             LOGGER.warning("No scatter plots were generated.")
 
-        if pcs_plot_files:
-            selected_plot = pcs_plot_files [ 0 ]
-            if selected_plot.exists():
-                # response.outputs [ "pc1_plot" ].file = selected_plot
-                response.outputs [ "pcs_plot" ].file = selected_plot
-            else:
-                LOGGER.warning(f"PC plot file {selected_plot} not found.")
-        else:
-            LOGGER.warning("No PC plots were generated.")
-
         # SST map
         if sst_fp.exists():
             response.outputs [ "sst_map" ].file = sst_fp
@@ -377,6 +367,89 @@ class Drought(Process):
 
         # Mark as complete
         response.update_status("Drought process completed successfully!", 100)
+
+        # Save the forecast script for future use
+        forecast_script_path = workdir / "predict_next_year.py"
+        import textwrap
+
+        script = textwrap.dedent("""
+            import numpy as np
+            import pandas as pd
+            from pathlib import Path
+            from sklearn.linear_model import LinearRegression
+            import xarray as xr
+
+            #-----------------------------
+            # Parameters to be set by user
+            #-----------------------------
+
+            PHASE = "pos"
+            YEAR = 2025
+            SEASON_TO_FORECAST = [1, 2, 3]
+
+            #-----------------------------
+
+            def weightsst(sst):
+
+            import numpy as np
+            from numpy import cos, radians
+
+            # If 3D, remove singleton zlev
+            if "zlev" in sst.dims and sst.sizes["zlev"] == 1:
+            sst = sst.squeeze("zlev")
+
+            # Get latitude
+            lat = sst.coords["Y"]
+            weights = cos(radians(lat))
+
+            # Expand weights to match shape (Y, X)
+            weights_2d = xr.DataArray(weights, dims=["Y"]).broadcast_like(sst)
+
+            # Apply weights directly using xarray broadcasting
+            weighted_sst = sst * weights_2d
+
+            return weighted_sst
+
+            def get_future_sst_3mon(year, season, anomalies=True):
+            import xarray as xr
+
+            var = "anom" if anomalies else "sst"
+            url = f"https://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCDC/.ERSST/.version5/.{var}/dods"
+
+            # Do not decode time automatically
+            ds = xr.open_dataset(url, decode_times=False)
+
+            # Select time indices manually if needed
+            # For now, take the last 3 time steps (approx JFM 2025)
+            # You could refine this based on exact time indexing
+            sst = ds[var].isel(T=slice(-3, None)).mean(dim="T")
+
+            return sst
+
+            MODEL_DIR = Path(".")
+            OUTPUT_CSV = MODEL_DIR / f"forecast_{PHASE}_{YEAR}.csv"
+
+            eofs = pd.read_csv(MODEL_DIR / f"eofs_{PHASE}.csv").values
+            coefs = pd.read_csv(MODEL_DIR / f"coefficients_{PHASE}.csv", index_col=0)
+            reg = LinearRegression()
+            reg.coef_ = coefs.loc[coefs.index != "Intercept", "Coefficient"].values
+            reg.intercept_ = coefs.loc["Intercept", "Coefficient"]
+
+            sst = get_future_sst_3mon(YEAR, SEASON_TO_FORECAST, anomalies=True)
+            print(sst)
+            masked_sst = weightsst(sst).values
+            mask = np.load(MODEL_DIR / f"sst_mask_{PHASE}.npy")
+            flat_sst = masked_sst[~mask]
+            pcs = flat_sst.dot(eofs)
+
+            forecast = reg.predict([pcs])[0]
+            print(f"Forecasted precipitation for {YEAR}: {forecast:.2f}")
+
+            pd.DataFrame({ "year": [YEAR], "forecast": [forecast], "phase": [PHASE] }).to_csv(OUTPUT_CSV, index=False)
+            print(f"Saved forecast to {OUTPUT_CSV}")
+            """)
+
+        forecast_script_path.write_text(script)
 
         # Create ZIP archive
         zip_path = workdir / f"outputs_{indicator}.zip"
@@ -391,13 +464,45 @@ class Drought(Process):
             if combined_fp.exists():
                 zipf.write(combined_fp, arcname=combined_fp.name)
 
-            # Write all pc1_vs_hindcast plots
-            for pcs_plot in pcs_plot_files:
-                if pcs_plot.exists():
-                    zipf.write(pcs_plot, arcname=pcs_plot.name)
+            if pcs_csv_fp.exists():
+                zipf.write(pcs_csv_fp, arcname=pcs_csv_fp.name)
 
+            # NEW: Add regressor outputs to ZIP (for both phases if 2-phase)
+            for phase in phaseind if M==2 else [ "allyears" ]:
+                eofs_path = workdir / "pc_vs_hindcast" / f"eofs_{phase}.csv"
+                coef_path = workdir / "pc_vs_hindcast" / f"coefficients_{phase}.csv"
+                if eofs_path.exists():
+                    zipf.write(eofs_path, arcname=eofs_path.name)
+                if coef_path.exists():
+                    zipf.write(coef_path, arcname=coef_path.name)
+
+                mask_path = workdir / "pc_vs_hindcast" / f"sst_mask_{phase}.npy"
+                if mask_path.exists():
+                    zipf.write(mask_path, arcname=mask_path.name)
+
+                if forecast_script_path.exists():
+                    zipf.write(forecast_script_path, arcname=forecast_script_path.name)
 
         # Assign final ZIP to response
         response.outputs [ "forecast_bundle" ].file = zip_path
+
+        # Copy main outputs to Desktop (adjust for OS or path if needed)
+        try:
+            desktop_path = Path.home() / "Desktop"
+
+            shutil.copy(ts_file, desktop_path / ts_file.name)
+            if sst_fp.exists():
+                shutil.copy(sst_fp, desktop_path / sst_fp.name)
+            if 'combined_fp' in locals() and combined_fp.exists():
+                shutil.copy(combined_fp, desktop_path / combined_fp.name)
+            if zip_path.exists():
+                shutil.copy(zip_path, desktop_path / zip_path.name)
+            if pcs_csv_fp.exists():
+                shutil.copy(pcs_csv_fp, desktop_path / pcs_csv_fp.name)
+
+            LOGGER.info("Outputs copied to Desktop.")
+
+        except Exception as e:
+            LOGGER.warning(f"Could not copy to Desktop: {e}")
 
         return response
