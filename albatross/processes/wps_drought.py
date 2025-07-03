@@ -38,7 +38,7 @@ class Drought(Process):
                 "pr",
                 "Monthly global precipitation file",
                 abstract="text file of precipitation",
-                default=f"https://raw.githubusercontent.com/climateintelligence/albatross/main/albatross/data/{default_target_file}.txt",
+                default=f"https://raw.githubusercontent.com/climateintelligence/albatross/refs/heads/main/albatross/data/{default_target_file}.txt",
                 supported_formats=[FORMATS.TEXT],
             ),
             LiteralInput(
