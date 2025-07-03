@@ -13,7 +13,7 @@ def test_wps_drought():
 
     # Correct the input parameters and encode URLs properly
     datainputs_dict = {
-        "pr": "https://raw.githubusercontent.com/climateintelligence/albatross/new_NIPA/albatross/data/E-OBS_precipitation_Como.txt",
+        "pr": "https://raw.githubusercontent.com/climateintelligence/albatross/refs/heads/main/albatross/data/E-OBS_precipitation_Como.txt",
         "indicator": "NAO",
         "start_year": "1951",
         "end_year": "1999",
