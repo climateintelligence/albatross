@@ -9,7 +9,7 @@ from pywps.app.Common import Metadata
 # drought specific functions
 from albatross.climdiv_data import get_data, create_kwgroups
 from albatross.new_simpleNIPA import NIPAphase
-from albatross.utils import sstMap, plot_model_results
+from albatross.utils import sstMap, plot_model_results, append_model_pcs
 
 # NIPA specific imports
 import matplotlib.pyplot as plt
@@ -115,9 +115,11 @@ class Drought(Process):
         super(Drought, self).__init__(
             self._handler,
             identifier="drought",
-            title="A process to forecast precipitation.",
-            abstract="A process to forecast precipitation...",
-            # keywords=['hello', 'demo'],
+            title="Albatross",
+            abstract="Albatross is a process designed to forecast seasonal hydroclimatic variables based on climate "
+                     "indicators such as the North Atlantic Oscillation (NAO) or the Oceanic Niño Index (ONI). "
+                     "It is built on the NIPA model (Zimmermann et al., 2016) and uses Principal Component "
+                     "Regression (PCR) to analyze historical data and construct a forecasting model.",
             metadata=[
                 Metadata("PyWPS", "https://pywps.org/"),
                 Metadata("Birdhouse", "http://bird-house.github.io/"),
@@ -131,7 +133,7 @@ class Drought(Process):
         )
 
     def _handler(self, request, response):
-        LOGGER.info("Starting drought processing...")
+        LOGGER.info("Processing...")
 
         # Status update
         response.update_status("Retrieving input data and initializing variables...", 10)
@@ -151,7 +153,6 @@ class Drought(Process):
 
 
         LOGGER.info("Select the input-output files")
-
         indicator = request.inputs [ "indicator" ] [ 0 ].data.lower()
         if indicator=="nao":
             index_file = files("albatross").joinpath("data", "nao.txt")
@@ -212,7 +213,7 @@ class Drought(Process):
         (workdir / "pc_vs_hindcast").mkdir(parents=True, exist_ok=True)
 
         # Update status
-        response.update_status("Running NIPA drought model...", 50)
+        response.update_status("NIPA running...", 50)
 
         # Processing steps...
         kwgroups = create_kwgroups(
@@ -243,14 +244,11 @@ class Drought(Process):
         ts_file = workdir / f"timeseries.csv"
 
         fig, axes = plt.subplots(M, 1, figsize=(6, 12))
-        timeseries = {'years': [ ], 'data': [ ], 'hindcast': [ ]}
-        # pc1 = {'pc1': [ ]}
-        scatter_fp = None
+        pcs_file_rows = [ ]
         scatter_files = []
-        pc1_plot_fp = None
+        timeseries_rows = []
         pcs_plot_files = []
 
-        print('NIPA running...')
         if M==1:
             phase = 'allyears'
             model = NIPAphase(climdata, sst, index, phaseind [ phase ])
@@ -259,9 +257,13 @@ class Drought(Process):
             model.bootcorr(corrconf=0.95)
             model.gridCheck()
             model.crossvalpcr(xval=crv_flag)
-            timeseries [ 'years' ] = model.years
-            timeseries [ 'data' ] = model.clim_data
-            timeseries [ 'hindcast' ] = model.hindcast
+            for i in range(len(model.years)):
+                timeseries_rows.append({
+                    "year": int(model.years [ i ]),
+                    "observed": float(model.clim_data [ i ]),
+                    "hindcast": float(model.hindcast [ i ]),
+                    "phase": model.phase  # Optional: drop this if not needed
+                })
 
             if map_flag:
                 fig, axes, m = sstMap(model, fig=fig, ax=axes)
@@ -269,10 +271,13 @@ class Drought(Process):
                 fig.savefig(sst_fp)
                 plt.close(fig)
 
-
             scatter_fp = workdir / "scatter_plots" / f"{phase}.png"
             plot_model_results(model, scatter_fp, crv_flag=crv_flag)
             scatter_files.append(scatter_fp)
+            append_model_pcs(model, pcs_file_rows)
+
+            df = pd.DataFrame(timeseries_rows).sort_values("year")
+            df.to_csv(ts_file, index=False)
 
         else:
             for phase, ax in zip(phaseind, axes):
@@ -282,9 +287,13 @@ class Drought(Process):
                 model.bootcorr(corrconf=0.95)
                 model.gridCheck()
                 model.crossvalpcr(xval=crv_flag)
-                timeseries [ 'years' ].append(model.years)
-                timeseries [ 'data' ].append(model.clim_data)
-                timeseries [ 'hindcast' ].append(model.hindcast)
+                for i in range(len(model.years)):
+                    timeseries_rows.append({
+                        "year": int(model.years [ i ]),
+                        "observed": float(model.clim_data [ i ]),
+                        "hindcast": float(model.hindcast [ i ]),
+                        "phase": model.phase  # Optional: drop this if not needed
+                    })
 
                 if map_flag:
                     fig, ax, m = sstMap(model, fig=fig, ax=ax)
@@ -294,33 +303,14 @@ class Drought(Process):
                     fig.savefig(sst_fp)
                     plt.close(fig)
 
-                scatter_fp = workdir / "scatter_plots" / f"{phase}.png"
-                plot_model_results(model, scatter_fp, crv_flag=crv_flag)
-                scatter_files.append(scatter_fp)
+                scatter_files.append((model, phase))
+                append_model_pcs(model, pcs_file_rows)
 
+                df = pd.DataFrame(timeseries_rows).sort_values("year")
+                df.to_csv(ts_file, index=False)
 
-        # save timeseries (exceptions handled only for 2 phase analysis)
-        if np.size(timeseries [ 'hindcast' ] [ 0 ])==1:
-            if math.isnan(timeseries [ 'hindcast' ] [ 0 ]):
-                # no result for the first phase -> consider only the second set of results
-                timeseries [ 'years' ] = timeseries [ 'years' ] [ 1 ]
-                timeseries [ 'data' ] = timeseries [ 'data' ] [ 1 ]
-                timeseries [ 'hindcast' ] = timeseries [ 'hindcast' ] [ 1 ]
-
-        elif np.size(timeseries [ 'hindcast' ] [ 1 ])==1:
-            if math.isnan(timeseries [ 'hindcast' ] [ 1 ]):
-                # no result for the second phase -> consider only the first set of results
-                timeseries [ 'years' ] = timeseries [ 'years' ] [ 0 ]
-                timeseries [ 'data' ] = timeseries [ 'data' ] [ 0 ]
-                timeseries [ 'hindcast' ] = timeseries [ 'hindcast' ] [ 0 ]
-
-        else:
-            timeseries [ 'years' ] = np.concatenate(timeseries [ 'years' ])
-            timeseries [ 'data' ] = np.concatenate(timeseries [ 'data' ])
-            timeseries [ 'hindcast' ] = np.concatenate(timeseries [ 'hindcast' ])
-
-        df = pd.DataFrame(timeseries)
-        df.to_csv(ts_file)
+        df = pd.DataFrame(timeseries_rows).sort_values("year")
+        df.to_csv(ts_file, index=False)
 
         print('NIPA run completed')
 
@@ -335,11 +325,33 @@ class Drought(Process):
 
         # Only assign scatter plot if any were generated
         if scatter_files:
-            scatter_fp = scatter_files [ 0 ]
-            if scatter_fp.exists():
-                response.outputs [ "scatter_plot" ].file = scatter_fp
+            if M==1:
+                # Single-phase mode: just return the only plot
+                scatter_fp = scatter_files [ 0 ]
+                if scatter_fp.exists():
+                    response.outputs [ "scatter_plot" ].file = scatter_fp
+                else:
+                    LOGGER.warning(f"Scatter plot file {scatter_fp} does not exist!")
             else:
-                LOGGER.warning(f"Scatter plot file {scatter_fp} does not exist!")
+                # Two-phase mode: combine both scatter plots side-by-side
+                combined_fp = workdir / "scatter_plots" / "combined_scatter.png"
+                fig, axs = plt.subplots(1, len(scatter_files), figsize=(12, 6))
+
+                if len(scatter_files)==1:
+                    axs = [ axs ]  # Ensure axs is iterable if only one
+
+                for ax, (model, phase) in zip(axs, scatter_files):
+                    plot_model_results(model, ax=ax, crv_flag=crv_flag)
+                    ax.set_title(phase)
+
+                plt.tight_layout()
+                fig.savefig(combined_fp)
+                plt.close(fig)
+
+                if combined_fp.exists():
+                    response.outputs [ "scatter_plot" ].file = combined_fp
+                else:
+                    LOGGER.warning("Combined scatter plot could not be created.")
         else:
             LOGGER.warning("No scatter plots were generated.")
 
@@ -359,6 +371,10 @@ class Drought(Process):
         else:
             LOGGER.warning(f"SST map {sst_fp} not found!")
 
+        pcs_df = pd.DataFrame(pcs_file_rows)
+        pcs_csv_fp = workdir / "pc_vs_hindcast" / "pcs_vs_hindcast.csv"
+        pcs_df.to_csv(pcs_csv_fp, index=False)
+
         # Mark as complete
         response.update_status("Drought process completed successfully!", 100)
 
@@ -371,31 +387,17 @@ class Drought(Process):
             if sst_fp.exists():
                 zipf.write(sst_fp, arcname=sst_fp.name)
 
-            # Write all scatter plots
-            for scatter_plot in scatter_files:
-                if scatter_plot.exists():
-                    zipf.write(scatter_plot, arcname=scatter_plot.name)
+            combined_fp = workdir / "scatter_plots" / "combined_scatter.png"
+            if combined_fp.exists():
+                zipf.write(combined_fp, arcname=combined_fp.name)
 
             # Write all pc1_vs_hindcast plots
             for pcs_plot in pcs_plot_files:
                 if pcs_plot.exists():
                     zipf.write(pcs_plot, arcname=pcs_plot.name)
 
-            # Extra: phase-specific scatter plots
-            for phase in phaseind:
-                phase_fp = workdir / "scatter_plots" / f"{phase}_scatter.png"
-                if phase_fp.exists():
-                    zipf.write(phase_fp, arcname=phase_fp.name)
 
         # Assign final ZIP to response
         response.outputs [ "forecast_bundle" ].file = zip_path
-        # Local save path
-        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # output_dir = Path.home() / "Desktop" / "wps_outputs" / f"run_{timestamp}"
-        # output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Optionally copy to desktop
-        # shutil.copy(zip_path, output_dir / zip_path.name)
-        # print(f"Output files copied to: {output_dir}")
 
         return response

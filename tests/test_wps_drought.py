@@ -2,9 +2,6 @@ from pywps import Service
 from pywps.tests import client_for
 from albatross.processes.wps_drought import Drought  # Adjust path if necessary
 from pywps import configuration
-from urllib.parse import urlencode
-from pathlib import Path
-
 
 # Print PyWPS workdir
 print("PyWPS Work Directory:", configuration.get_config_value("server", "workdir"))
@@ -18,9 +15,9 @@ def test_wps_drought():
     datainputs_dict = {
         "pr": "https://raw.githubusercontent.com/climateintelligence/albatross/refs/heads/new_NIPA/albatross/data/E-OBS_precipitation_Como.txt",
         "indicator": "nao",
-        "start_year": "1990",
-        "end_year": "2023",
-        "month": "1,2,3",  # Ensure the correct parameter name
+        "start_year": "1971",
+        "end_year": "2008",
+        "month": "4,5,6",  # Ensure the correct parameter name
         "phase_mode": "2",
     }
 

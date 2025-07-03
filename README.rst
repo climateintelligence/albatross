@@ -14,6 +14,7 @@ Albatross
     :alt: GitHub license
 
 Albatross (the bird)
+
   *Albatross is a bird designed for seasonal forecasting of hydroclimatic variables.*
 
 This WPS is designed to produce deterministic forecasts of seasonal hydroclimatic variables (e.g. precipitation, temperature, streamflows,...) of a given location, leveraging teleconnections. It is built upon the Niño Index Phase Analysis (NIPA) framework by Zimmerman et al. (2016).
