@@ -481,7 +481,7 @@ class Drought(Process):
         # Assign final ZIP to response
         response.outputs [ "forecast_bundle" ].file = zip_path
 
-        # Copy main outputs to Desktop (adjust for OS or path if needed)
+        """# Copy main outputs to Desktop (adjust for OS or path if needed)
         try:
             desktop_path = Path.home() / "Desktop"
 
@@ -498,6 +498,6 @@ class Drought(Process):
             LOGGER.info("Outputs copied to Desktop.")
 
         except Exception as e:
-            LOGGER.warning(f"Could not copy to Desktop: {e}")
+            LOGGER.warning(f"Could not copy to Desktop: {e}")"""
 
         return response
