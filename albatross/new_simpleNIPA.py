@@ -300,7 +300,6 @@ class NIPAphase(object):
         }"""
 
     def crossvalpcr(self, xval=True, explained_variance_threshold=0.95):
-        print("Crossvalpcr with new function")
         import numpy as np
         from scipy.stats import pearsonr as corr
         from sklearn.linear_model import LinearRegression
