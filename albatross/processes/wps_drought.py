@@ -246,6 +246,7 @@ class Drought(Process):
             model.years = years [ phaseind [ phase ] ]
             # model.bootcorr(corrconf=0.95)
             # model.gridCheck()
+            print("boot corr and grid check moved inside")
             model.crossvalpcr(xval=crv_flag)
             for i in range(len(model.years)):
                 timeseries_rows.append({
