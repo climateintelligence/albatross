@@ -166,17 +166,17 @@ class NIPAphase(object):
 
         return
 
-    def crossvalpcr(self, xval=True, explained_variance_threshold=0.95):
+    """def crossvalpcr(self, xval=True, explained_variance_threshold=0.95):
         import numpy as np
         from scipy.stats import pearsonr as corr
         from sklearn.linear_model import LinearRegression
         from sklearn.model_selection import KFold
-        from albatross.utils import weightsst
+        from albatross.utils import weight_glo_var
 
         predictand = self.clim_data
 
         # Check for insufficient SST data
-        if self.corr_grid.mask.sum() >= len(self.sst.lat) * len(self.sst.lon) - 4:
+        if self.corr_grid.mask.sum() >= len(self.glo_var.lat) * len(self.glo_var.lon) - 4:
             self.flags [ "noSST" ] = True
             self.hindcast = None
             self.pcs = None
@@ -186,13 +186,13 @@ class NIPAphase(object):
             return
 
         self.flags [ "noSST" ] = False
-        sstidx = ~self.corr_grid.mask
-        raw_sst = weightsst(self.sst).data [ :, sstidx ]
+        glo_var_idx = ~self.corr_grid.mask
+        raw_glo_var = weight_glo_var(self.glo_var).data [ :, glo_var_idx ]
         n_samples = len(predictand)
 
         if not xval:
             # Standard PCA regression (no CV)
-            cov_matrix = np.cov(raw_sst.T)
+            cov_matrix = np.cov(raw_glo_var.T)
             eigval, eigvec = np.linalg.eig(cov_matrix)
             eigval, eigvec = np.real(eigval), np.real(eigvec)
 
@@ -204,7 +204,7 @@ class NIPAphase(object):
             n_pc = np.searchsorted(cumulative_var, explained_variance_threshold) + 1
 
             eofs = eigvec [ :, :n_pc ]
-            pcs = raw_sst.dot(eofs)
+            pcs = raw_glo_var.dot(eofs)
 
             reg = LinearRegression().fit(pcs, predictand)
             yhat = reg.predict(pcs)
@@ -221,13 +221,13 @@ class NIPAphase(object):
 
         # Cross-validation PCA regression
         yhat = np.zeros(n_samples)
-        pcs_all = np.zeros((n_samples, raw_sst.shape [ 1 ]))
+        pcs_all = np.zeros((n_samples, raw_glo_var.shape [ 1 ]))
         models = [ ]
 
         kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
-        for train_idx, test_idx in kf.split(raw_sst):
-            X_train, X_test = raw_sst [ train_idx ], raw_sst [ test_idx ]
+        for train_idx, test_idx in kf.split(raw_glo_var):
+            X_train, X_test = raw_glo_var [ train_idx ], raw_glo_var [ test_idx ]
             y_train = predictand [ train_idx ]
 
             cov_matrix = np.cov(X_train.T)
@@ -281,7 +281,7 @@ class NIPAphase(object):
         n_pc_best = best_model [ "n_pc" ]
 
         # Refit on full dataset using best number of PCs
-        cov_matrix = np.cov(raw_sst.T)
+        cov_matrix = np.cov(raw_glo_var.T)
         eigval, eigvec = np.linalg.eig(cov_matrix)
         eigval, eigvec = np.real(eigval), np.real(eigvec)
 
@@ -289,7 +289,174 @@ class NIPAphase(object):
         eigvec = eigvec [ :, sorted_idx ]
 
         eofs = eigvec [ :, :n_pc_best ]
-        pcs_full = raw_sst.dot(eofs)
+        pcs_full = raw_glo_var.dot(eofs)
+        reg_full = LinearRegression().fit(pcs_full, predictand)
+
+        self.pcs = pcs_full
+        self.lin_model = {
+            "eofs": eofs,
+            "regression": reg_full,
+            "n_pc": n_pc_best
+        }"""
+
+    def crossvalpcr(self, xval=True, explained_variance_threshold=0.95):
+        import numpy as np
+        from scipy.stats import pearsonr as corr
+        from sklearn.linear_model import LinearRegression
+        from sklearn.model_selection import KFold
+        from albatross.utils import weight_glo_var, vcorr, sig_test
+
+        predictand = self.clim_data
+        n_samples = len(predictand)
+        yhat = np.zeros(n_samples)
+
+        # NOTE: The full corr_grid and raw_glo_var are no longer calculated here.
+        # They will be calculated *inside* each CV loop to prevent data leakage.
+
+        if not xval:
+            # Standard PCA regression (no CV)
+            # This part still needs the full corr_grid, but it's not for CV
+            # so data leakage isn't an issue here.
+            self.bootcorr(corrconf=0.95)
+            self.gridCheck()
+            if self.corr_grid.mask.sum() >= len(self.glo_var.lat) * len(self.glo_var.lon) - 4:
+                self.flags [ "noSST" ] = True
+                self.hindcast = None
+                self.pcs = None
+                self.lin_model = None
+                self.correlation = None
+                print("Insufficient SST data for PCA regression.")
+                return
+
+            glo_var_idx = ~self.corr_grid.mask
+            raw_glo_var = weight_glo_var(self.glo_var).data [ :, glo_var_idx ]
+
+            cov_matrix = np.cov(raw_glo_var.T)
+            eigval, eigvec = np.linalg.eig(cov_matrix)
+            eigval, eigvec = np.real(eigval), np.real(eigvec)
+
+            sorted_idx = np.argsort(eigval) [ ::-1 ]
+            eigvec = eigvec [ :, sorted_idx ]
+
+            explained_ratio = eigval / eigval.sum()
+            cumulative_var = np.cumsum(explained_ratio)
+            n_pc = np.searchsorted(cumulative_var, explained_variance_threshold) + 1
+
+            eofs = eigvec [ :, :n_pc ]
+            pcs = raw_glo_var.dot(eofs)
+
+            reg = LinearRegression().fit(pcs, predictand)
+            yhat = reg.predict(pcs)
+
+            self.pcs = pcs
+            self.hindcast = yhat
+            self.correlation = corr(predictand, yhat) [ 0 ]
+            self.lin_model = {
+                "eofs": eofs,
+                "regression": reg,
+                "n_pc": n_pc
+            }
+            return
+
+        # Cross-validation PCA regression
+        models = [ ]
+        kf = KFold(n_splits=5, shuffle=True, random_state=42)
+        p_value_threshold = 1 - 0.95  # This should match the value used in bootcorr
+
+        # Get full global data for slicing later
+        full_glo_var_data = weight_glo_var(self.glo_var).data
+
+        for train_idx, test_idx in kf.split(predictand):
+            X_train_full = full_glo_var_data [ train_idx ]
+            X_test_full = full_glo_var_data [ test_idx ]
+            y_train = predictand [ train_idx ]
+
+            # --- CORRECTION: Step 1 (Feature Selection within the loop) ---
+            # Calculate correlation mask on *training data only*
+            corr_grid_train = vcorr(X=X_train_full, y=y_train)
+            n_yrs_train = len(y_train)
+            p_value = sig_test(corr_grid_train, n_yrs_train)
+
+            # This is a simplified version of bootcorr for demonstration.
+            # You may want to call a modified `bootcorr_fold` function.
+            glo_var_idx_train = ~np.ma.masked_array(corr_grid_train, ~(p_value < p_value_threshold)).mask
+
+            # Check for insufficient data in the training set
+            if glo_var_idx_train.sum()==0:
+                print("Skipping fold: Insufficient SST data in training set.")
+                continue
+
+            # --- CORRECTION: Step 2 (Data Filtering) ---
+            # Apply the mask from the training set to both training and test data
+            X_train = X_train_full [ :, glo_var_idx_train ]
+            X_test = X_test_full [ :, glo_var_idx_train ]
+
+            # --- CORRECTION: Step 3 (PCA and Regression within the loop) ---
+            # Perform PCA and regression on the training data
+            cov_matrix = np.cov(X_train.T)
+            eigval, eigvec = np.linalg.eig(cov_matrix)
+            eigval, eigvec = np.real(eigval), np.real(eigvec)
+
+            sorted_idx = np.argsort(eigval) [ ::-1 ]
+            eigvec = eigvec [ :, sorted_idx ]
+
+            explained_ratio = eigval / eigval.sum()
+            cumulative_var = np.cumsum(explained_ratio)
+            n_pc = np.searchsorted(cumulative_var, explained_variance_threshold) + 1
+
+            if n_pc==0 or np.isnan(eigval [ :n_pc ]).any():
+                continue
+
+            eofs = eigvec [ :, :n_pc ]
+            pcs_train = X_train.dot(eofs)
+            pcs_test = X_test.dot(eofs)
+
+            if pcs_train.shape [ 0 ] < n_pc:
+                continue
+
+            reg = LinearRegression().fit(pcs_train, y_train)
+            preds = reg.predict(pcs_test)
+
+            yhat [ test_idx ] = preds
+
+            models.append({
+                "eofs": eofs,
+                "regression": reg,
+                "n_pc": n_pc,
+                "corr": corr(y_train, reg.predict(pcs_train)) [ 0 ]
+            })
+
+        if not models:
+            self.hindcast = None
+            self.pcs = None
+            self.lin_model = None
+            self.correlation = None
+            self.flags [ "noSST" ] = True
+            return
+
+        # Store hindcast from CV
+        self.hindcast = yhat
+        self.correlation = corr(predictand, yhat) [ 0 ]
+
+        # Select best number of PCs and refit on all data
+        best_model = max(models, key=lambda m: m [ "corr" ])
+        n_pc_best = best_model [ "n_pc" ]
+
+        # --- Refit on full dataset (this can still use the old method) ---
+        self.bootcorr(corrconf=0.95)
+        self.gridCheck()
+        glo_var_idx_full = ~self.corr_grid.mask
+        raw_glo_var_full = weight_glo_var(self.glo_var).data [ :, glo_var_idx_full ]
+
+        cov_matrix = np.cov(raw_glo_var_full.T)
+        eigval, eigvec = np.linalg.eig(cov_matrix)
+        eigval, eigvec = np.real(eigval), np.real(eigvec)
+
+        sorted_idx = np.argsort(eigval) [ ::-1 ]
+        eigvec = eigvec [ :, sorted_idx ]
+
+        eofs = eigvec [ :, :n_pc_best ]
+        pcs_full = raw_glo_var_full.dot(eofs)
         reg_full = LinearRegression().fit(pcs_full, predictand)
 
         self.pcs = pcs_full
