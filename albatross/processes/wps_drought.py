@@ -151,7 +151,7 @@ class Drought(Process):
         LOGGER.info("Select the input-output files")
         indicator = request.inputs [ "indicator" ] [ 0 ].data.upper()
         index_file = files("albatross").joinpath("data", f"{indicator}.txt")
-        
+
         pr_input = request.inputs.get("pr", [ None ]) [ 0 ]
 
 

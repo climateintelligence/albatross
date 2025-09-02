@@ -7,6 +7,21 @@ from matplotlib import cm
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
+from functools import lru_cache
+
+def _freeze_kwargs(kwargs: dict):
+    """
+    Convert a kwargs dict into a hashable tuple of sorted key-value pairs.
+    Lists and tuples are converted to tuples recursively.
+    """
+    def freeze(v):
+        if isinstance(v, dict):
+            return _freeze_kwargs(v)
+        elif isinstance(v, (list, tuple)):
+            return tuple(freeze(i) for i in v)
+        return v
+
+    return tuple(sorted((k, freeze(v)) for k, v in kwargs.items()))
 
 def plot_model_results(model, filepath=None, crv_flag=True, ax=None):
     import matplotlib.pyplot as plt
@@ -50,13 +65,13 @@ def plot_model_results(model, filepath=None, crv_flag=True, ax=None):
             fig.savefig(filepath, bbox_inches="tight")
         plt.close()
 
-def weightsst(sst):
-    # SST needs to be downloaded using the openDAPsst function
+def weight_glo_var(glo_var):
+    # SST needs to be downloaded using the openDAP function
     from numpy import cos, radians
-    weights = cos(radians(sst.lat))
+    weights = cos(radians(glo_var.lat))
     for i, weight in enumerate(weights):
-        sst.data[:, i, :] *= weight
-    return sst
+        glo_var.data[:, i, :] *= weight
+    return glo_var
 
 def sig_test(r, n, twotailed=True):
     import numpy as np
@@ -125,31 +140,6 @@ def int_to_month():
     }
     return i2m
 
-def slp_tf():
-    d = {
-        -4: '08',
-            -3: '09',
-            -2: '10',
-            -1: '11',
-        0: '12',
-        1: '01',
-        2: '02',
-        3: '03',
-        4: '04',
-        5: '05',
-        6: '06',
-        7: '07',
-        8: '08',
-        9: '09',
-        10: '10',
-        11: '11',
-        12: '12',
-        13: '01',
-        14: '02',
-        15: '03',
-    }
-    return d
-
 def meteo_swiss_convert(f_in, f_out):
     data = np.loadtxt(f_in, skiprows=28)
     years = data[:, 0]
@@ -171,7 +161,38 @@ def meteo_swiss_convert(f_in, f_out):
 
     return
 
-def sstMap(nipaPhase, cmap=cm.jet, fig=None, ax=None):
+def glo_var_Map_unfiltered(nipaPhase, cmap=cm.jet):
+    from mpl_toolkits.basemap import Basemap
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    m = Basemap(ax=ax, projection='cyl', lon_0=270, resolution='i')
+    m.drawmapboundary(fill_color='#ffffff', linewidth=0.15)
+    m.drawcoastlines(linewidth=0.15)
+    m.fillcontinents(color='#eeeeee', lake_color='#ffffff')
+    parallels = np.linspace(m.llcrnrlat, m.urcrnrlat, 4)
+    meridians = np.linspace(m.llcrnrlon, m.urcrnrlon, 4)
+    m.drawparallels(parallels, linewidth=0.3, labels=[0, 0, 0, 0])
+    m.drawmeridians(meridians, linewidth=0.3, labels=[0, 0, 0, 0])
+
+    lons = nipaPhase.glo_var.lon
+    lats = nipaPhase.glo_var.lat
+    data = nipaPhase.corr_grid_full
+    data = np.where(data==0, np.nan, data)
+
+    lons, lats = np.meshgrid(lons, lats)
+    im1 = m.pcolormesh(
+        lons, lats, data,
+        vmin=np.nanmin(data),
+        vmax=np.nanmax(data),
+        cmap=cmap,
+        latlon=True
+    )
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('bottom', size='5%', pad=0.05)
+    fig.colorbar(im1, cax=cax, orientation='horizontal')
+    return fig
+
+def glo_var_Map(nipaPhase, cmap=cm.jet, fig=None, ax=None):
     from mpl_toolkits.basemap import Basemap
     if fig is None:
         fig = plt.figure()
@@ -185,16 +206,21 @@ def sstMap(nipaPhase, cmap=cm.jet, fig=None, ax=None):
     m.drawparallels(parallels, linewidth=0.3, labels=[0, 0, 0, 0])
     m.drawmeridians(meridians, linewidth=0.3, labels=[0, 0, 0, 0])
 
-    lons = nipaPhase.sst.lon
-    lats = nipaPhase.sst.lat
+    lons = nipaPhase.glo_var.lon
+    lats = nipaPhase.glo_var.lat
 
     data = nipaPhase.corr_grid
     levels = np.linspace(-1.0, 1.0, 41)
 
     lons, lats = np.meshgrid(lons, lats)
 
-    im1 = m.pcolormesh(lons, lats, data, vmin=np.min(levels),
-                       vmax=np.max(levels), cmap=cmap, latlon=True)
+    im1 = m.pcolormesh(
+        lons, lats, data,
+        vmin=np.nanmin(data),
+        vmax=np.nanmax(data),
+        cmap=cmap,
+        latlon=True
+    )
     divider = make_axes_locatable(ax)
     cax = divider.append_axes('bottom', size='5%', pad=0.05)
     fig.colorbar(im1, cax=cax, orientation='horizontal')
@@ -222,3 +248,33 @@ def append_model_pcs(model, pcs_file_rows):
             for pc_idx in range(n_pc):
                 row[f"PC{pc_idx + 1}"] = float(model.pcs[i, pc_idx])
             pcs_file_rows.append(row)
+
+from pathlib import Path
+
+def extract_target_name(filepath_or_url):
+    return Path(filepath_or_url).stem
+
+def lag_to_month():
+    d = {
+        -4: '08',
+            -3: '09',
+            -2: '10',
+            -1: '11',
+        0: '12',
+        1: '01',
+        2: '02',
+        3: '03',
+        4: '04',
+        5: '05',
+        6: '06',
+        7: '07',
+        8: '08',
+        9: '09',
+        10: '10',
+        11: '11',
+        12: '12',
+        13: '01',
+        14: '02',
+        15: '03',
+    }
+    return d
