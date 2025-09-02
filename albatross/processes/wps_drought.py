@@ -244,8 +244,8 @@ class Drought(Process):
             model = NIPAphase(climdata, sst, index, phaseind [ phase ])
             model.phase = phase
             model.years = years [ phaseind [ phase ] ]
-            model.bootcorr(corrconf=0.95)
-            model.gridCheck()
+            # model.bootcorr(corrconf=0.95)
+            # model.gridCheck()
             model.crossvalpcr(xval=crv_flag)
             for i in range(len(model.years)):
                 timeseries_rows.append({
@@ -277,8 +277,8 @@ class Drought(Process):
                 model = NIPAphase(climdata, sst, index, phaseind [ phase ])
                 model.phase = phase
                 model.years = years [ phaseind [ phase ] ]
-                model.bootcorr(corrconf=0.95)
-                model.gridCheck()
+                # model.bootcorr(corrconf=0.95)
+                # model.gridCheck()
                 model.crossvalpcr(xval=crv_flag)
                 model.save_regressor(workdir)
                 for i in range(len(model.years)):
