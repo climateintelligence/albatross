@@ -37,12 +37,9 @@ The service is designed to work with **only four mandatory user inputs** to defi
 3.  **Target Season:** Define the season of interest (e.g., JFM, DJF).
 4.  **Phase mode:** Define the level of El Niño/La Niña phase analysis.
 
-
 **🚀 Operational Forecasting Modes**
 
 Albatross supports two distinct operational modes, governed by the ``End year`` parameter, allowing for seamless transition from model verification to real-time prediction.
-
-
 
 **🗓 Hindcast (Model Calibration and Verification)**
 
@@ -60,8 +57,6 @@ This new mode enables the generation of predictions for the current or upcoming 
 * **Availability:** Set the ``End year`` parameter to the **current year** (2026) or a **future year** (e.g., 2027).
 * **Process:** The model is trained on historical data, and then uses the current month's teleconnection index value (e.g., the latest available ONI) to generate the forecast value.
 * **Output:** A single point prediction for the specified target season and year.
-
----
 
 **🔧 Detailed Input Requirements**
 
@@ -94,9 +89,8 @@ To run the WPS, you must provide the following parameters:
 +----------------------+----------------------------------------------------------------------------------+
 
 
-# ==============================================================================
-# 2. TECHNICAL & DEVELOPMENT DETAILS
-# ==============================================================================
+TECHNICAL & DEVELOPMENT DETAILS
+==============================================================================
 
 🔍 What NIPA Does (The Method)
 -------------------------------
