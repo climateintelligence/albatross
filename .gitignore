@@ -107,3 +107,15 @@ testdata.json
 
 # IDE settings
 .vscode/
+.DS_Store
+**/.DS_Store
+albatross/.index_cache/
+wps_drought_test_log_*.txt
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# local caches/logs
+albatross/.index_cache/
+wps_drought_test_log_*.txt
