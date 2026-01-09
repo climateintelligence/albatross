@@ -6,8 +6,8 @@ Albatross
     :target: https://albatross.readthedocs.io/en/latest/?version=latest
     :alt: Documentation Status
 
-.. image:: https://img.shields.io/github/license/climateintelligence/albatross.svg
-   :target: https://github.com/climateintelligence/albatross/LICENSE
+.. image:: https://img.shields.io/github/license/climateintelligence/albatross?cacheSeconds=300
+   :target: https://github.com/climateintelligence/albatross/blob/main/LICENSE
    :alt: GitHub license
 
 ALBATROSS AS A CLIMATE SERVICE
