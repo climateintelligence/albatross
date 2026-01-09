@@ -3,7 +3,7 @@
 Module for loading climate division data for running NIPA
 """
 
-from albatross.atmos_ocean_data import create_phase_index2, load_climdata, openDAPsst, openDAPslp, openDAPsst_cached, openDAPslp_cached
+from albatross.atmos_ocean_data import create_phase_index2, load_climdata, openDAPsst, openDAPslp, openDAPsst_cached, openDAPslp_cached, openDAPz500, openDAPz500_cached
 from albatross.utils import int_to_month
 
 from functools import lru_cache
@@ -47,6 +47,11 @@ def get_data(kwgroups, glo_var_name=None, workdir=None, use_cache=True, load_tar
     elif glo_var_name == 'slp':
         glo_var_func = openDAPslp_cached if use_cache else openDAPslp
         glo_var = glo_var_func(anomalies=True, workdir=workdir, **kwgroups['glo_var'])
+    elif glo_var_name=='z500':
+        glo_var_func = openDAPz500_cached if use_cache else openDAPz500
+        # choose whether you want height in meters (recommended)
+        glo_var = glo_var_func(anomalies=True, convert_to_height_m=True, workdir=workdir, **kwgroups [ 'glo_var' ])
+
     else:
         raise ValueError(f"Global variable {glo_var_name} not supported.")
 

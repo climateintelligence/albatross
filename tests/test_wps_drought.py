@@ -13,8 +13,8 @@ from albatross.processes.wps_drought import Drought
 basin = "ZRB"
 start_year = "1951"
 end_year = "2015"
-forecast_year_ok = "2016"  # or whatever you want
-glo_vars = ["sst"]
+forecast_year_ok = "2025"  # or whatever you want
+glo_vars = ["z500"]
 indices = ["NINO 3.4"]
 target_variables = ["monthly_inflows"]
 

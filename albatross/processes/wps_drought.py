@@ -126,9 +126,9 @@ class Drought(Process):
             LiteralInput(
                 identifier="glo_var_name",
                 title="Global Variable Name",
-                abstract="Global variable to use ('sst' or 'slp')",
+                abstract="Global variable to use ('sst', 'z500', 'slp')",
                 data_type="string",
-                allowed_values=["sst", "slp"],
+                allowed_values=["sst", "slp","z500"],
                 default="sst",
             ),
             LiteralInput(

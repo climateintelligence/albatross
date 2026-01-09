@@ -184,6 +184,107 @@ def openDAPslp(anomalies: bool = True,  **kwargs):
     LOGGER.info("✅  SLP download & processing complete.")
     return seasonal_var(grid, lat, lon)
 
+LOGGER = logging.getLogger("PYWPS")
+
+def openDAPz500(anomalies: bool = True, convert_to_height_m: bool = True, **kwargs):
+    """
+    Fetch NCEP/NCAR CDAS-1 monthly geopotential at 500 hPa from IRIDL via OPeNDAP
+    and return seasonal means (optionally as anomalies).
+
+    Parameters
+    ----------
+    anomalies : bool, default True
+        If True removes seasonal climatology (computed over returned period).
+        (If you need a fixed 1981-2010 climatology, we can implement that explicitly.)
+    convert_to_height_m : bool, default True
+        If True converts geopotential (phi, m^2/s^2) to geopotential height (m) by /g.
+    kwargs : expected keys: startyr, endyr, months (e.g. [12,1,2]), n_mon
+    """
+    import re, urllib.error
+    import numpy as np
+    from collections import namedtuple
+    from numpy import arange
+    from pydap.client import open_url
+    from albatross.utils import int_to_month
+
+    LOGGER.info("⏬  Downloading Z500 via OPeNDAP…")
+
+    # ----------------------------
+    # 1) Build IRIDL URL
+    # ----------------------------
+    # CDAS-1 monthly, Intrinsic, PressureLevel, geopotential (phi)
+    # Pressure selection is done via P/(500)VALUES
+    base_url = (
+        "http://iridl.ldeo.columbia.edu"
+        "/SOURCES/.NOAA/.NCEP-NCAR/.CDAS-1"
+        "/.MONTHLY/.Intrinsic/.PressureLevel/.phi"
+        "/P/(500)VALUES"
+        "/T/(startmon%20startyr)(endmon%20endyr)RANGEEDGES"
+        "/T/nbox/0.0/boxAverage/dods"
+    )
+
+    i2m = int_to_month()
+    subs = {
+        "startmon": i2m[kwargs["months"][0]],
+        "endmon":   i2m[kwargs["months"][-1]],
+        "startyr":  kwargs["startyr"],
+        "endyr":    kwargs["endyr"],
+        "nbox":     kwargs["n_mon"],
+    }
+    for k, v in subs.items():
+        base_url = re.sub(k, str(v), base_url)
+
+    LOGGER.debug(f"Z500 URL → {base_url}")
+
+    # ----------------------------
+    # 2) Open dataset with retry
+    # ----------------------------
+    def open_url_retry():
+        return open_url(base_url)
+
+    ds = with_retry(
+        open_url_retry,
+        max_attempts=20,          # Z500/phi can be slower; keep higher like your SST tweak
+        delay=20,
+        allowed_exceptions=(urllib.error.URLError, TimeoutError, Exception),
+        log_prefix="[Z500] ",
+        context=base_url
+    )
+
+    # In pydap, dimensions usually come back (T, Y, X) after P fixed to 500
+    # Variable name is "phi" at this path.
+    grid = ds["phi"].array[:, :, :].data.squeeze()  # (t, y, x)
+    time = ds["T"].data[:].squeeze()
+    lat  = ds["Y"][:]
+    lon  = ds["X"][:]
+
+    # ----------------------------
+    # 3) Collapse to seasons
+    # ----------------------------
+    nseas = 12 // kwargs["n_mon"]
+    season_idx = arange(0, len(time), nseas).astype(int)
+    grid = grid[season_idx]  # (nyears, y, x)
+
+    # ----------------------------
+    # 4) Convert geopotential to height (optional)
+    # ----------------------------
+    if convert_to_height_m:
+        g = 9.80665
+        grid = grid / g
+
+    # ----------------------------
+    # 5) Anomalies (optional)
+    # ----------------------------
+    if anomalies:
+        if grid.size == 0 or np.isnan(grid).all():
+            raise ValueError("[Z500] ❌ Z500 grid is empty or contains only NaNs — cannot compute anomalies.")
+        clim = np.nanmean(grid, axis=0)
+        grid = grid - clim
+
+    seasonal_var = namedtuple("seasonal_var", ("data", "lat", "lon"))
+    LOGGER.info("✅  Z500 download & processing complete.")
+    return seasonal_var(grid, lat, lon)
+
 """Function needed to allow caching of OPeNDAP data. Using it, we can avoid downloading multiple time same glo_var"""
 
 from functools import lru_cache
@@ -198,6 +299,15 @@ def openDAPsst_cached_frozen(anomalies: bool, frozen_kwargs):
 def openDAPsst_cached(anomalies=True, **kwargs):
     frozen = _freeze_kwargs(kwargs)
     return openDAPsst_cached_frozen(anomalies, frozen)
+
+@lru_cache(maxsize=20)
+def openDAPz500_cached_frozen(anomalies: bool, convert_to_height_m: bool, frozen_kwargs):
+    kwargs = dict(frozen_kwargs)
+    return openDAPz500(anomalies=anomalies, convert_to_height_m=convert_to_height_m, **kwargs)
+
+def openDAPz500_cached(anomalies=True, convert_to_height_m=True, **kwargs):
+    frozen = _freeze_kwargs(kwargs)
+    return openDAPz500_cached_frozen(anomalies, convert_to_height_m, frozen)
 
 @lru_cache(maxsize=20)
 def openDAPslp_cached_frozen(anomalies: bool, frozen_kwargs):
