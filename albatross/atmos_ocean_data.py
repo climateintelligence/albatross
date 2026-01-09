@@ -155,10 +155,6 @@ def openDAPslp(anomalies: bool = True,  **kwargs):
         allowed_exceptions=(urllib.error.URLError, TimeoutError, Exception),
         log_prefix="[SLP] "
     )
-    """try:
-        ds = open_url(base_url)
-    except (urllib.error.URLError, Exception) as e:
-        raise RuntimeError(f"❌ Could not open SLP dataset: {e}")"""
 
     grid = ds["pressure"].array[:, :, :, :].data.squeeze()   # (t , y , x)
     time = ds["T"].data[:].squeeze()
@@ -215,35 +211,34 @@ def openDAPslp_cached(anomalies=True, **kwargs):
 import time
 import logging
 
-def with_retry(func, max_attempts=3, delay=5, allowed_exceptions=(Exception,), log_prefix=""):
+import time
+import logging
+import sys
+
+def with_retry(func, max_attempts=3, delay=5, allowed_exceptions=(Exception,), log_prefix="", context=""):
     """
-    Esegue una funzione con retry in caso di errore.
-
-    Parameters
-    ----------
-    func : callable
-        La funzione da eseguire.
-    max_attempts : int
-        Numero massimo di tentativi.
-    delay : int
-        Secondi di attesa tra un tentativo e l'altro.
-    allowed_exceptions : tuple
-        Tipi di eccezioni su cui applicare il retry.
-    log_prefix : str
-        Prefisso per i log.
-
-    Returns
-    -------
-    Output di `func()` se ha successo, altrimenti rilancia l’ultima eccezione.
+    Run func() with retries. Prints attempt number and flushes immediately.
+    `context` is an optional string (e.g., URL) to print once per attempt.
     """
     for attempt in range(1, max_attempts + 1):
         try:
+            msg = f"{log_prefix}Attempt {attempt}/{max_attempts}"
+            if context:
+                msg += f" | {context}"
+            print(msg, flush=True)
+            logging.warning(msg)
             return func()
+
         except allowed_exceptions as e:
-            logging.warning(f"{log_prefix}⚠️  Attempt {attempt}/{max_attempts} failed: {e}")
+            msg = f"{log_prefix}⚠️ Attempt {attempt}/{max_attempts} failed: {e}"
+            print(msg, flush=True)
+            logging.warning(msg)
+
             if attempt < max_attempts:
+                msg2 = f"{log_prefix}⏳ Retrying in {delay} seconds..."
+                print(msg2, flush=True)
+                logging.warning(msg2)
                 time.sleep(delay)
-                print(f"{log_prefix}⏳ Retrying in {delay} seconds...")
             else:
                 raise RuntimeError(f"{log_prefix}❌ All {max_attempts} attempts failed.") from e
 
@@ -271,7 +266,6 @@ def load_clim_file(fp):
     clim_data = pd.Series(data=data, index=index)
 
     return clim_data
-
 
 def create_phase_index2(**kwargs):
     from copy import deepcopy

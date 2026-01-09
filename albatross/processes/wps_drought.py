@@ -1,125 +1,161 @@
+# albatross/processes/wps_drought.py
+
 import logging
-
-from pywps import Process, LiteralInput, ComplexInput, ComplexOutput
-from pywps import FORMATS, Format
-from pathlib import Path
-from importlib.resources import files
-from pywps.app.Common import Metadata
-
-# drought specific functions
-from albatross.climdiv_data import get_data, create_kwgroups
-from albatross.new_simpleNIPA import NIPAphase
-from albatross.utils import sstMap, plot_model_results, append_model_pcs
-
-# NIPA specific imports
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-import math
-from datetime import datetime
+import json
 import shutil
 import zipfile
-import os
+from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlparse
+from urllib.parse import quote
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import requests
+from importlib.resources import files
+
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,   # or INFO
+    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+)
+
+def dbg(msg: str):
+    print(f"[DBG] {msg}", flush=True)
+    LOGGER.info(f"[DBG] {msg}")
+
+
+from pywps import Process, LiteralInput, ComplexInput, ComplexOutput, FORMATS, Format
+from pywps.app.Common import Metadata
+
+
+from albatross.climdiv_data import get_data, create_kwgroups
+from albatross.new_simpleNIPA import NIPAphase
+from albatross.utils import (
+    glo_var_Map,
+    glo_var_Map_unfiltered,
+    plot_model_results,
+    append_model_pcs,
+    extract_target_name,
+    _compute_phase_thresholds,
+    _save_phase_artifacts,
+)
 
 LOGGER = logging.getLogger("PYWPS")
-FORMAT_PNG = Format("image/png", extension=".png", encoding="base64")
-default_target_file = "APGD_prcpComo"
+FORMAT_PDF = Format("image/pdf", extension=".pdf", encoding="base64")
+
+default_target_file = "APGD_Como"
 crv_flag = True
 map_flag = True
 
-class Drought(Process):
-    """A process to forecast precipitation."""
 
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+def resolve_target_input(inp, outdir: Path) -> Path:
+    """
+    Download target file if input is a URL, or accept uploaded file.
+    Compatible with your original behavior.
+    """
+    if inp and hasattr(inp, "data") and isinstance(inp.data, str) and inp.data.startswith("http"):
+        url = inp.data
+        filename = Path(urlparse(url).path).name or "target.txt"
+        dst = outdir / filename
+        r = requests.get(url, timeout=60)
+        r.raise_for_status()
+        dst.write_bytes(r.content)
+        return dst
+
+    if hasattr(inp, "file") and inp.file:
+        path = Path(inp.file)
+        with path.open("r") as f:
+            first = f.readline().strip()
+            second = f.readline().strip()
+
+        # If uploaded file contains only a URL, download it
+        if first.startswith("http") and not second:
+            url = first
+            filename = Path(urlparse(url).path).name or "target.txt"
+            dst = outdir / filename
+            r = requests.get(url, timeout=60)
+            r.raise_for_status()
+            dst.write_bytes(r.content)
+            return dst
+
+        return path
+
+    raise ValueError("No valid target supplied. Provide a URL or upload a .txt file.")
+
+
+# -----------------------------------------------------------------------------
+# Process
+# -----------------------------------------------------------------------------
+class Drought(Process):
     def __init__(self):
         inputs = [
             ComplexInput(
-                "pr",
-                "Monthly global precipitation file",
-                abstract="text file of precipitation",
-                default=f"https://raw.githubusercontent.com/climateintelligence/albatross/refs/heads/main/albatross/data/{default_target_file}.txt",
+                identifier="target",
+                title="Upload the variable to forecast",
+                abstract="text file of target file",
+                default=(
+                    "https://raw.githubusercontent.com/climateintelligence/albatross/"
+                    f"refs/heads/main/albatross/data/{default_target_file}.txt"
+                ),
                 supported_formats=[FORMATS.TEXT],
             ),
+            LiteralInput(identifier="start_year", title="Start Year", default="1971", data_type="string"),
+            LiteralInput(identifier="end_year", title="End Year", default="2019", data_type="string"),
+            LiteralInput(identifier="month", title="Target season", default="4,5,6", data_type="string"),
             LiteralInput(
-                "start_year",
-                "Start Year",
-                default="1971",
+                identifier="indicator",
+                title="Climate Indicator",
+                abstract="Choose between NAO, NINO 3.4, SCA, EAWR, AO, ONI, DMI, SOI, WP, PNA, QBO",
                 data_type="string",
-            ),
-            LiteralInput(
-                "end_year",
-                "End Year",
-                default="2008",
-                data_type="string",
-            ),
-            LiteralInput(
-                "month",
-                "Target season",
-                default="4,5,6",  # 👈 Provide multiple months as a comma-separated string
-                data_type="string",
-            ),
-            LiteralInput(
-                "indicator",
-                "Climate Indicator",
-                abstract="Choose between 'NAO', 'ONI', 'QBO','EAWR','WP', or 'PNA'",
-                data_type="string",
-                allowed_values=[ 'NAO', 'ONI', 'QBO','EAWR','WP', 'PNA' ],
+                allowed_values=["SCA", "EAWR", "AO", "ONI", "DMI", "SOI", "WP", "PNA", "NAO", "QBO", "NINO 3.4"],
                 default="NAO",
             ),
             LiteralInput(
-                "phase_mode",
-                "Phase mode: 1 (allyears) or 2 (positive/negative phases)",
-                abstract="Set to 1 for one-phase mode (allyears), or 2 for two-phase mode (pos/neg)",
+                identifier="phase_mode",
+                title="Phase mode: 1/2/3/4",
+                abstract="1=allyears, 2=pos/neg, 3=pos/neutral/neg, 4=pos/neutpos/neutneg/neg",
                 default="2",
                 data_type="string",
-            )
-        ]
-        outputs = [
-            ComplexOutput(
-                "forecast_file",
-                "Forecast File ",
-                as_reference=True,
-                supported_formats=[FORMATS.TEXT],
             ),
-            ComplexOutput(
-                "scatter_plot",
-                "Scatter Plot",
-                as_reference=True,
-                supported_formats=[FORMAT_PNG],
+            LiteralInput(
+                identifier="glo_var_name",
+                title="Global Variable Name",
+                abstract="Global variable to use ('sst' or 'slp')",
+                data_type="string",
+                allowed_values=["sst", "slp"],
+                default="sst",
             ),
-            ComplexOutput(
-                "forecast_bundle",
-                "All Forecast Outputs (ZIP)",
-                as_reference=True,
-                supported_formats=[ FORMATS.ZIP ],
+            LiteralInput(
+                identifier="forecast_year",
+                title="Forecast year (optional)",
+                abstract="If provided, attempt operational forecast for that year.",
+                data_type="string",
+                min_occurs=0,
             ),
-            ComplexOutput(
-                "sst_map",
-                "SST Map",
-                as_reference=True,
-                supported_formats=[FORMAT_PNG],
-            ),
-            ComplexOutput(
-                "pcs_plot",
-                "Predicted vs Observed (PCA regression)",
-                as_reference=True,
-                supported_formats=[ FORMAT_PNG ],
-            )
         ]
 
-        super(Drought, self).__init__(
+        outputs = [
+            ComplexOutput(identifier="forecast_file", title="Forecast File", as_reference=True, supported_formats=[FORMATS.TEXT]),
+            ComplexOutput(identifier="scatter_plot", title="Scatter Plot", as_reference=True, supported_formats=[FORMAT_PDF]),
+            ComplexOutput(identifier="forecast_bundle", title="All Forecast Outputs (ZIP)", as_reference=True, supported_formats=[FORMATS.ZIP]),
+            ComplexOutput(identifier="glo_var_map", title="Global variable correlation map", as_reference=True, supported_formats=[FORMAT_PDF]),
+            ComplexOutput("pcs_plot", "Predicted vs Observed (PCA regression)", as_reference=True, supported_formats=[FORMAT_PDF]),
+        ]
+
+        super().__init__(
             self._handler,
             identifier="drought",
             title="Albatross",
-            abstract="Albatross is a process designed to forecast seasonal hydroclimatic variables based on climate "
-                     "indicators such as the North Atlantic Oscillation (NAO) or the Oceanic Niño Index (ONI). "
-                     "It is built on the NIPA model (Zimmermann et al., 2016) and uses Principal Component "
-                     "Regression (PCR) to analyze historical data and construct a forecasting model.",
+            abstract="Seasonal hydroclimate forecasting using EOF/PCR and climate indices.",
             metadata=[
                 Metadata("PyWPS", "https://pywps.org/"),
                 Metadata("Birdhouse", "http://bird-house.github.io/"),
-                Metadata("PyWPS Demo", "https://pywps-demo.readthedocs.io/en/latest/"),
             ],
             version="0.1",
             inputs=inputs,
@@ -130,375 +166,370 @@ class Drought(Process):
 
     def _handler(self, request, response):
         LOGGER.info("Processing...")
-
-        # Status update
         response.update_status("Retrieving input data and initializing variables...", 10)
 
-        try:
-            months = list(map(int, request.inputs["month"][0].data.split(",")))
-            startyr = int(request.inputs["start_year"][0].data)
-            endyr = int(request.inputs["end_year"][0].data)
-        except KeyError as e:
-            LOGGER.error(f"Missing required input parameter: {e}")
-            response.status = "Failed"
-            return response
+        glo_var_name = request.inputs["glo_var_name"][0].data.lower()
 
-        M = int(request.inputs [ "phase_mode" ] [ 0 ].data)
-        if M not in [ 1, 2 ]:
-            raise ValueError("phase_mode must be 1 or 2")
+        months = list(map(int, request.inputs["month"][0].data.split(",")))
+        startyr = int(request.inputs["start_year"][0].data)
+        endyr = int(request.inputs["end_year"][0].data)
 
+        M = int(request.inputs["phase_mode"][0].data)
+        if M not in (1, 2, 3, 4):
+            raise ValueError("phase_mode must be 1, 2, 3, or 4")
 
-        LOGGER.info("Select the input-output files")
-        indicator = request.inputs [ "indicator" ] [ 0 ].data.upper()
+        indicator = request.inputs["indicator"][0].data.upper()
         index_file = files("albatross").joinpath("data", f"{indicator}.txt")
-
-        pr_input = request.inputs.get("pr", [ None ]) [ 0 ]
-
-
-        def resolve_precip_input(pr_input, workdir, fallback_file):
-            import requests
-            from pathlib import Path
-
-            if pr_input and hasattr(pr_input, "data") and isinstance(pr_input.data, str) and pr_input.data.startswith(
-                "http"):
-                url = pr_input.data
-                target = Path(workdir) / "downloaded_precip.txt"
-                LOGGER.info(f"Downloading climate data from URL: {url}")
-                try:
-                    r = requests.get(url)
-                    r.raise_for_status()
-                    with open(target, "wb") as out:
-                        out.write(r.content)
-                    return target
-                except Exception as e:
-                    LOGGER.error(f"Failed to download climate data: {e}")
-                    raise
-
-            if hasattr(pr_input, "file") and pr_input.file:
-                path = Path(pr_input.file)
-                with open(path, "r") as f:
-                    first_line = f.readline().strip()
-                    second_line = f.readline().strip()
-
-                if first_line.startswith("http") and not second_line:
-                    url = first_line
-                    target = Path(workdir) / "downloaded_precip.txt"
-                    LOGGER.info(f"Downloading climate data from URL: {url}")
-                    r = requests.get(url)
-                    r.raise_for_status()
-                    with open(target, "wb") as out:
-                        out.write(r.content)
-                    return target
-                else:
-                    return path
-
-            return fallback_file
-
-        clim_file = resolve_precip_input(pr_input, self.workdir, files("albatross").joinpath("data", f"{default_target_file}.txt"))
 
         workdir = Path(self.workdir)
 
-        # Ensure output directories exist
-        (workdir / "sst_maps").mkdir(parents=True, exist_ok=True)
-        (workdir / "scatter_plots").mkdir(parents=True, exist_ok=True)
-        (workdir / "pc_vs_hindcast").mkdir(parents=True, exist_ok=True)
+        # Target is only for training/hindcast in this step
+        pr_input = request.inputs.get("target", [None])[0]
+        clim_file = resolve_target_input(pr_input, workdir)
 
-        # Update status
-        response.update_status("NIPA running...", 50)
+        # Output dirs
+        maps_dir = workdir / f"{glo_var_name}_corr_maps"
+        scat_dir = workdir / f"scatter_plots_{glo_var_name}"
+        pc_dir = workdir / "pc_vs_hindcast"
+        maps_dir.mkdir(parents=True, exist_ok=True)
+        scat_dir.mkdir(parents=True, exist_ok=True)
+        pc_dir.mkdir(parents=True, exist_ok=True)
 
-        # Processing steps...
+        response.update_status("Loading training data...", 20)
+
         kwgroups = create_kwgroups(
             debug=True,
             climdata_months=months,
             climdata_startyr=startyr,
-            n_yrs= endyr - startyr + 1,
-            n_mon_sst=3,
+            n_yrs=endyr - startyr + 1,
+            n_mon_glo_var=3,
             n_mon_index=3,
-            sst_lag=3,
+            glo_var_lag=3,
             n_phases=M,
             phases_even=True,
             index_lag=3,
             index_fp=index_file,
             climdata_fp=clim_file,
+            glo_var_name=glo_var_name,
         )
 
-        # Years goes from start year to end year
         years = np.arange(startyr, endyr + 1)
-        workdir = Path(self.workdir)
 
-        # Run Model
-        climdata, sst, index, phaseind = get_data(kwgroups, workdir=workdir)
+        climdata, _, glo_var, index_avg, phaseind = get_data(
+            kwgroups, glo_var_name=glo_var_name, workdir=workdir
+        )
 
-        # Output file paths
-        sst_fp = workdir / "sst_maps" / f"corr_map.png"
-        ts_file = workdir / f"timeseries.csv"
+        # ✅ PHASE-AGNOSTIC: no special-casing for M=1; just use what get_data produced
+        phases = list(phaseind.keys())
 
-        fig, axes = plt.subplots(M, 1, figsize=(6, 12))
-        pcs_file_rows = [ ]
-        scatter_files = []
-        timeseries_rows = []
+        # Save thresholds + per-phase masks using your utils (correct signature)
+        phase_meta = _compute_phase_thresholds(index_avg=np.asarray(index_avg), phaseind=phaseind)
+        _save_phase_artifacts(
+            workdir=workdir,
+            years=years,
+            index_avg=np.asarray(index_avg),
+            phaseind=phaseind,
+            thresholds=phase_meta,
+        )
 
+        training_config = {
+            "indicator": indicator,
+            "glo_var_name": glo_var_name,
+            "season_months": list(months),
+            "n_mon_glo_var": kwgroups["glo_var"]["n_mon"],
+            "glo_var_lag": kwgroups["glo_var"].get("lag", 3),
+            "n_mon_index": kwgroups["index"]["n_mon"],
+            "index_lag": kwgroups["index"].get("lag", 3),
+            "n_phases": kwgroups["index"]["n_phases"],
+            "phases_even": kwgroups["index"]["phases_even"],
+        }
+        (pc_dir / "training_config.json").write_text(json.dumps(training_config, indent=2))
 
-        if M==1:
-            phase = 'allyears'
-            model = NIPAphase(climdata, sst, index, phaseind [ phase ])
+        response.update_status("Training per-phase models...", 50)
+
+        def run_one_phase(phase: str) -> dict:
+            model = NIPAphase(climdata, glo_var_name, glo_var, index_avg, phaseind[phase])
             model.phase = phase
-            model.years = years [ phaseind [ phase ] ]
+            model.years = years[phaseind[phase]]
+
             model.bootcorr(corrconf=0.95)
             model.gridCheck()
-            print("boot corr and grid check moved inside")
             model.crossvalpcr(xval=crv_flag)
-            for i in range(len(model.years)):
-                timeseries_rows.append({
-                    "year": int(model.years [ i ]),
-                    "observed": float(model.clim_data [ i ]),
-                    "hindcast": float(model.hindcast [ i ]),
-                    "phase": model.phase  # Optional: drop this if not needed
-                })
-
             model.save_regressor(workdir)
 
+            # Hindcast rows
+            ts_rows = []
+            if model.hindcast is not None:
+                for k in range(len(model.years)):
+                    ts_rows.append(
+                        {
+                            "year": int(model.years[k]),
+                            "observed": float(model.clim_data[k]),
+                            "hindcast": float(model.hindcast[k]),
+                            "phase": phase,
+                        }
+                    )
+
+            # Maps
+            filt_pdf = maps_dir / f"corr_map_{phase}.pdf"
+            filt_png = maps_dir / f"corr_map_{phase}.png"
+            full_pdf = maps_dir / f"corr_map_full_{phase}.pdf"
+
             if map_flag:
-                fig, axes, m = sstMap(model, fig=fig, ax=axes)
-                axes.set_title('%s, %.2f' % (phase, model.correlation))
-                fig.savefig(sst_fp)
-                plt.close(fig)
+                f, a, _ = glo_var_Map(model)
+                a.set_title(f"{phase}, {model.correlation:.2f}" if model.correlation is not None else phase)
+                f.savefig(filt_pdf)
+                f.savefig(filt_png, dpi=150)
+                plt.close(f)
 
-            scatter_fp = workdir / "scatter_plots" / f"{phase}.png"
-            plot_model_results(model, scatter_fp, crv_flag=crv_flag)
-            scatter_files.append(scatter_fp)
-            append_model_pcs(model, pcs_file_rows)
-            print(f"✔ pcs_file_rows contains {len(pcs_file_rows)} rows")
+                f2 = glo_var_Map_unfiltered(model)
+                f2.savefig(full_pdf)
+                plt.close(f2)
 
-            df = pd.DataFrame(timeseries_rows).sort_values("year")
-            df.to_csv(ts_file, index=False)
+            # Scatter
+            scatter_pdf = scat_dir / f"scatter_{phase}.pdf"
+            if model.lin_model is not None:
+                plot_model_results(model, scatter_pdf, crv_flag=crv_flag)
 
+            # PCs rows
+            pcs_rows = []
+            append_model_pcs(model, pcs_rows)
+
+            return {
+                "phase": phase,
+                "timeseries_rows": ts_rows,
+                "pcs_rows": pcs_rows,
+                "scatter_pdf": scatter_pdf,
+                "filt_pdf": filt_pdf,
+                "filt_png": filt_png,
+                "full_pdf": full_pdf,
+            }
+
+        results = [run_one_phase(ph) for ph in phases]
+
+        # Publish WPS outputs (keep consistent with your original expectations)
+        response.outputs["scatter_plot"].file = results[0]["scatter_pdf"]
+        response.outputs["pcs_plot"].file = results[0]["scatter_pdf"]
+
+        if len(results) == 1:
+            response.outputs["glo_var_map"].file = results[0]["filt_pdf"]
         else:
-            for phase, ax in zip(phaseind, axes):
-                model = NIPAphase(climdata, sst, index, phaseind [ phase ])
-                model.phase = phase
-                model.years = years [ phaseind [ phase ] ]
-                model.bootcorr(corrconf=0.95)
-                model.gridCheck()
-                model.crossvalpcr(xval=crv_flag)
-                model.save_regressor(workdir)
-                for i in range(len(model.years)):
-                    timeseries_rows.append({
-                        "year": int(model.years [ i ]),
-                        "observed": float(model.clim_data [ i ]),
-                        "hindcast": float(model.hindcast [ i ]),
-                        "phase": model.phase  # Optional: drop this if not needed
-                    })
+            combined_map_fp = maps_dir / "combined_glo_var_map.pdf"
+            n = len(results)
+            fig_cm, axs_cm = plt.subplots(1, n, figsize=(6 * n, 5))
+            if n == 1:
+                axs_cm = [axs_cm]
+            for ax, r in zip(axs_cm, results):
+                img = plt.imread(str(r["filt_png"]))
+                ax.imshow(img)
+                ax.set_title(r["phase"])
+                ax.axis("off")
+            plt.tight_layout()
+            fig_cm.savefig(combined_map_fp)
+            plt.close(fig_cm)
+            response.outputs["glo_var_map"].file = combined_map_fp
 
-                if map_flag:
-                    fig, ax, m = sstMap(model, fig=fig, ax=ax)
-                    ax.set_title(
-                        '%s, %s' % (phase, f"{model.correlation:.2f}" if model.correlation is not None else "N/A"))
-                    # ax.set_title('%s, %.2f' % (phase, model.correlation))
-                    fig.savefig(sst_fp)
-                    plt.close(fig)
+        # Build hindcast tables
+        timeseries_rows, pcs_file_rows = [], []
+        for r in results:
+            timeseries_rows.extend(r["timeseries_rows"])
+            pcs_file_rows.extend(r["pcs_rows"])
 
-                scatter_files.append((model, phase))
-                append_model_pcs(model, pcs_file_rows)
-                print(f"✔ pcs_file_rows contains {len(pcs_file_rows)} rows")
+        ts_file = workdir / f"{glo_var_name}_timeseries.csv"
+        pd.DataFrame(timeseries_rows).sort_values("year").to_csv(ts_file, index=False)
+        response.outputs["forecast_file"].file = ts_file
 
-                df = pd.DataFrame(timeseries_rows).sort_values("year")
-                df.to_csv(ts_file, index=False)
+        pcs_csv_fp = pc_dir / "pcs_vs_hindcast.csv"
+        pd.DataFrame(pcs_file_rows).to_csv(pcs_csv_fp, index=False)
 
-        df = pd.DataFrame(timeseries_rows).sort_values("year")
-        df.to_csv(ts_file, index=False)
+        from albatross.utils import (
+            predictors_available,
+            latest_valid_index_value,
+            pick_phase_from_thresholds,
+            apply_saved_pcr,
+        )
 
-        print('NIPA run completed')
+        # -------------------------
+        # OPERATIONAL FORECAST
+        # -------------------------
+        forecast_status_fp = pc_dir / "operational_status.json"
+        forecast_out_fp = pc_dir / "operational_forecast.csv"
 
-        # Update status before saving outputs
-        response.update_status("Saving outputs and generating final results...", 90)
-
-        # Assign outputs if they exist
-        if ts_file.exists():
-            response.outputs [ "forecast_file" ].file = ts_file
+        fy_in = request.inputs.get("forecast_year")
+        if fy_in:
+            forecast_year = int(fy_in [ 0 ].data)
         else:
-            LOGGER.warning(f"Forecast file {ts_file} not found!")
+            forecast_year = None
 
-        # Only assign scatter plot if any were generated
-        if scatter_files:
-            if M==1:
-                # Single-phase mode: just return the only plot
-                scatter_fp = scatter_files [ 0 ]
-                if scatter_fp.exists():
-                    response.outputs [ "scatter_plot" ].file = scatter_fp
-                else:
-                    LOGGER.warning(f"Scatter plot file {scatter_fp} does not exist!")
-            else:
-                # Two-phase mode: combine both scatter plots side-by-side
-                combined_fp = workdir / "scatter_plots" / "combined_scatter.png"
-                fig, axs = plt.subplots(1, len(scatter_files), figsize=(12, 6))
+        op_status = {
+            "forecast_attempted": bool(forecast_year is not None),
+            "forecast_generated": False,
+            "forecast_year": forecast_year,
+            "season_months": ",".join(map(str, months)),
+            "reason": "",
+            "forecast_file": "",
+        }
 
-                if len(scatter_files)==1:
-                    axs = [ axs ]  # Ensure axs is iterable if only one
+        if forecast_year is not None:
+            try:
+                dbg(f"OP: starting forecast for year={forecast_year}, months={months}, glo_var={glo_var_name}, indicator={indicator}, M={M}")
+                dbg(f"OP: workdir={workdir}")
+                dbg(f"OP: pc_dir={pc_dir}")
+                dbg(f"OP: pc_dir contents (pc_transform): {[ p.name for p in pc_dir.glob('pc_transform_*.npz') ]}")
 
-                for ax, (model, phase) in zip(axs, scatter_files):
-                    plot_model_results(model, ax=ax, crv_flag=crv_flag)
-                    ax.set_title(phase)
+                dbg("OP: building kw_fc")
+                kw_fc = create_kwgroups(
+                    debug=True,
+                    climdata_months=months,
+                    # CHANGE 1: Start 1 year earlier
+                    climdata_startyr=forecast_year - 1,
+                    # CHANGE 2: Request 2 years (Padding)
+                    n_yrs=2,
+                    n_mon_glo_var=kwgroups [ "glo_var" ] [ "n_mon" ],
+                    n_mon_index=kwgroups [ "index" ] [ "n_mon" ],
+                    glo_var_lag=kwgroups [ "glo_var" ].get("lag", 3),
+                    n_phases=M,
+                    phases_even=kwgroups [ "index" ] [ "phases_even" ],
+                    index_lag=kwgroups [ "index" ].get("lag", 3),
+                    index_fp=index_file,
+                    climdata_fp=clim_file,
+                    glo_var_name=glo_var_name,
+                )
+                dbg(f"OP: kw_fc.glo_var={kw_fc [ 'glo_var' ]}")
+                dbg(f"OP: kw_fc.index={kw_fc [ 'index' ]}")
+                dbg("OP: calling get_data(load_target=False)")
 
-                plt.tight_layout()
-                fig.savefig(combined_fp)
-                plt.close(fig)
+                clim_none, gv_name2, glo_var_fc, index_fc, phaseind_fc = get_data(
+                    kw_fc,
+                    glo_var_name=glo_var_name,
+                    workdir=workdir,
+                    use_cache=True,
+                    load_target=False,
+                )
+                dbg(f"OP: get_data returned gv_name2={gv_name2}, clim_none={clim_none is None}")
+                dbg(f"OP: glo_var_fc.data shape={np.asarray(glo_var_fc.data).shape}")
+                dbg(f"OP: index_fc type={type(index_fc)}, shape={np.asarray(index_fc).shape}")
+                dbg(f"OP: phaseind_fc keys={list(phaseind_fc.keys())}")
 
-                if combined_fp.exists():
-                    response.outputs [ "scatter_plot" ].file = combined_fp
-                else:
-                    LOGGER.warning("Combined scatter plot could not be created.")
-        else:
-            LOGGER.warning("No scatter plots were generated.")
+                dbg("OP: running predictors_available")
+                predictors_available(glo_var_fc, index_fc)
+                dbg("OP: predictors_available OK")
 
-        # SST map
-        if sst_fp.exists():
-            response.outputs [ "sst_map" ].file = sst_fp
-        else:
-            LOGGER.warning(f"SST map {sst_fp} not found!")
+                idx_val = float(np.asarray(index_fc).ravel() [ -1 ])
+                dbg(f"OP: idx_val(latest)={idx_val}")
 
-        pcs_df = pd.DataFrame(pcs_file_rows)
-        pcs_csv_fp = workdir / "pc_vs_hindcast" / "pcs_vs_hindcast.csv"
-        pcs_df.to_csv(pcs_csv_fp, index=False)
+                dbg("OP: reading phase_thresholds.json")
+                meta = json.loads((pc_dir / "phase_thresholds.json").read_text())
+                phase = "allyears" if M==1 else pick_phase_from_thresholds(idx_val, meta)
+                dbg(f"OP: selected phase={phase}")
 
-        # Mark as complete
-        response.update_status("Drought process completed successfully!", 100)
+                expected_npz = pc_dir / f"pc_transform_{phase}.npz"
+                dbg(f"OP: expecting NPZ={expected_npz} exists={expected_npz.exists()}")
 
-        # Save the forecast script for future use
-        forecast_script_path = workdir / "predict_next_year.py"
-        import textwrap
+                field = np.asarray(glo_var_fc.data)
+                dbg(f"OP: raw field ndim={field.ndim}, shape={field.shape}")
 
-        script = textwrap.dedent("""
-            import numpy as np
-            import pandas as pd
-            from pathlib import Path
-            from sklearn.linear_model import LinearRegression
-            import xarray as xr
+                # CHANGE 3: Select the LAST year (-1), not the first (0)
+                if field.ndim==3:
+                    field = field [ -1 ]
 
-            #-----------------------------
-            # Parameters to be set by user
-            #-----------------------------
+                dbg(f"OP: field_2d shape={field.shape}")
 
-            PHASE = "pos"
-            YEAR = 2025
-            SEASON_TO_FORECAST = [1, 2, 3]
+                dbg("OP: calling apply_saved_pcr")
+                yhat = apply_saved_pcr(workdir=workdir, phase=phase, field_2d=field)
+                dbg(f"OP: yhat={yhat}")
 
-            #-----------------------------
+                dbg("OP: writing operational_forecast.csv")
+                pd.DataFrame([ {
+                    "forecast_year": int(forecast_year),
+                    "season_months": ",".join(map(str, months)),
+                    "indicator": indicator,
+                    "indicator_value": float(idx_val),
+                    "phase": phase,
+                    "forecast": float(yhat),
+                } ]).to_csv(forecast_out_fp, index=False)
 
-            def weightsst(sst):
+                dbg(f"OP: wrote {forecast_out_fp} (exists={forecast_out_fp.exists()})")
 
-            import numpy as np
-            from numpy import cos, radians
+                op_status [ "forecast_generated" ] = True
+                op_status [ "forecast_file" ] = forecast_out_fp.name
 
-            # If 3D, remove singleton zlev
-            if "zlev" in sst.dims and sst.sizes["zlev"] == 1:
-            sst = sst.squeeze("zlev")
+            except Exception as e:
+                LOGGER.exception("OP: failed with exception")  # <-- prints traceback
+                op_status [ "reason" ] = repr(e)
+                dbg(f"OP: FAILED reason={repr(e)}")
+                # For debugging, you may also want to raise to fail the whole process:
+                raise
 
-            # Get latitude
-            lat = sst.coords["Y"]
-            weights = cos(radians(lat))
+        forecast_status_fp.write_text(json.dumps(op_status, indent=2))
 
-            # Expand weights to match shape (Y, X)
-            weights_2d = xr.DataArray(weights, dims=["Y"]).broadcast_like(sst)
+        response.update_status("Packaging outputs...", 90)
 
-            # Apply weights directly using xarray broadcasting
-            weighted_sst = sst * weights_2d
-
-            return weighted_sst
-
-            def get_future_sst_3mon(year, season, anomalies=True):
-            import xarray as xr
-
-            var = "anom" if anomalies else "sst"
-            url = f"https://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NCDC/.ERSST/.version5/.{var}/dods"
-
-            # Do not decode time automatically
-            ds = xr.open_dataset(url, decode_times=False)
-
-            # Select time indices manually if needed
-            # For now, take the last 3 time steps (approx JFM 2025)
-            # You could refine this based on exact time indexing
-            sst = ds[var].isel(T=slice(-3, None)).mean(dim="T")
-
-            return sst
-
-            MODEL_DIR = Path(".")
-            OUTPUT_CSV = MODEL_DIR / f"forecast_{PHASE}_{YEAR}.csv"
-
-            eofs = pd.read_csv(MODEL_DIR / f"eofs_{PHASE}.csv").values
-            coefs = pd.read_csv(MODEL_DIR / f"coefficients_{PHASE}.csv", index_col=0)
-            reg = LinearRegression()
-            reg.coef_ = coefs.loc[coefs.index != "Intercept", "Coefficient"].values
-            reg.intercept_ = coefs.loc["Intercept", "Coefficient"]
-
-            sst = get_future_sst_3mon(YEAR, SEASON_TO_FORECAST, anomalies=True)
-            print(sst)
-            masked_sst = weightsst(sst).values
-            mask = np.load(MODEL_DIR / f"sst_mask_{PHASE}.npy")
-            flat_sst = masked_sst[~mask]
-            pcs = flat_sst.dot(eofs)
-
-            forecast = reg.predict([pcs])[0]
-            print(f"Forecasted precipitation for {YEAR}: {forecast:.2f}")
-
-            pd.DataFrame({ "year": [YEAR], "forecast": [forecast], "phase": [PHASE] }).to_csv(OUTPUT_CSV, index=False)
-            print(f"Saved forecast to {OUTPUT_CSV}")
-            """)
-
-        forecast_script_path.write_text(script)
-
-        # Create ZIP archive
         zip_path = workdir / f"outputs_{indicator}.zip"
         with zipfile.ZipFile(zip_path, "w") as zipf:
-            if ts_file.exists():
-                zipf.write(ts_file, arcname=ts_file.name)
+            pack = [ ]
 
-            if sst_fp.exists():
-                zipf.write(sst_fp, arcname=sst_fp.name)
+            # core tables
+            pack += [ ts_file, pcs_csv_fp ]
 
-            combined_fp = workdir / "scatter_plots" / "combined_scatter.png"
-            if combined_fp.exists():
-                zipf.write(combined_fp, arcname=combined_fp.name)
+            # per-phase plots
+            for r in results:
+                pack += [ r [ "scatter_pdf" ], r [ "filt_pdf" ], r [ "full_pdf" ] ]
 
-            if pcs_csv_fp.exists():
-                zipf.write(pcs_csv_fp, arcname=pcs_csv_fp.name)
+            # shared artifacts
+            for shared in ("phase_thresholds.json", "index_training.csv", "training_config.json"):
+                pack.append(pc_dir / shared)
 
-            # NEW: Add regressor outputs to ZIP (for both phases if 2-phase)
-            for phase in phaseind if M==2 else [ "allyears" ]:
-                eofs_path = workdir / "pc_vs_hindcast" / f"eofs_{phase}.csv"
-                coef_path = workdir / "pc_vs_hindcast" / f"coefficients_{phase}.csv"
-                if eofs_path.exists():
-                    zipf.write(eofs_path, arcname=eofs_path.name)
-                if coef_path.exists():
-                    zipf.write(coef_path, arcname=coef_path.name)
+            # regressor artifacts per phase
+            for ph in phases:
+                for fname in (
+                    f"eofs_{ph}.csv",
+                    f"coefficients_{ph}.csv",
+                    f"glo_var_mask_{ph}.npy",
+                    f"phase_mask_{ph}.csv",
+                    f"pc_transform_{ph}.npz",
+                ):
+                    pack.append(pc_dir / fname)
 
-                mask_path = workdir / "pc_vs_hindcast" / f"sst_mask_{phase}.npy"
-                if mask_path.exists():
-                    zipf.write(mask_path, arcname=mask_path.name)
+            # operational artifacts
+            pack += [ forecast_status_fp, forecast_out_fp ]
 
-                if forecast_script_path.exists():
-                    zipf.write(forecast_script_path, arcname=forecast_script_path.name)
+            # write unique existing files
+            seen = set()
+            for p in pack:
+                p = Path(p)
+                if p.exists() and p not in seen:
+                    zipf.write(p, arcname=p.name)
+                    seen.add(p)
 
-        # Assign final ZIP to response
-        response.outputs [ "forecast_bundle" ].file = zip_path
-
-        """# Copy main outputs to Desktop (adjust for OS or path if needed)
+        # Optional: copy to Desktop (best effort; keep your original behavior)
         try:
             desktop_path = Path.home() / "Desktop"
+            target_file = extract_target_name(clim_file)
+            months_string = ",".join(map(str, months))
+            out_folder = desktop_path / f"{target_file}_{startyr}_{endyr}" / f"{target_file}_{indicator}_{glo_var_name}_{M}_{months_string}_{startyr}_{endyr}"
+            out_folder.mkdir(parents=True, exist_ok=True)
 
-            shutil.copy(ts_file, desktop_path / ts_file.name)
-            if sst_fp.exists():
-                shutil.copy(sst_fp, desktop_path / sst_fp.name)
-            if 'combined_fp' in locals() and combined_fp.exists():
-                shutil.copy(combined_fp, desktop_path / combined_fp.name)
-            if zip_path.exists():
-                shutil.copy(zip_path, desktop_path / zip_path.name)
-            if pcs_csv_fp.exists():
-                shutil.copy(pcs_csv_fp, desktop_path / pcs_csv_fp.name)
+            to_copy = [ts_file, pcs_csv_fp, zip_path]
+            for out_id in ("scatter_plot", "glo_var_map"):
+                f = getattr(response.outputs[out_id], "file", None)
+                if f and Path(f).exists():
+                    to_copy.append(Path(f))
 
-            LOGGER.info("Outputs copied to Desktop.")
+            for src in to_copy:
+                src = Path(src)
+                if src.exists():
+                    shutil.copy(src, out_folder / src.name)
+
+            # copy pc_vs_hindcast folder
+            dst_dir = out_folder / "pc_vs_hindcast"
+            if pc_dir.exists():
+                if dst_dir.exists():
+                    shutil.rmtree(dst_dir)
+                shutil.copytree(pc_dir, dst_dir)
 
         except Exception as e:
-            LOGGER.warning(f"Could not copy to Desktop: {e}")"""
+            LOGGER.warning(f"Could not copy to Desktop: {e}")
 
+        response.update_status("Drought process completed successfully!", 100)
         return response

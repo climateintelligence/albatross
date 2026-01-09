@@ -17,12 +17,12 @@ def freeze_dict(d):
     """
     return json.dumps(d, sort_keys=True, default=str)
 
-def get_data(kwgroups, glo_var_name=None, workdir=None, use_cache=True):
+def get_data(kwgroups, glo_var_name=None, workdir=None, use_cache=True, load_target=True):
     # Create a unique key from parameters
-    clim_key = freeze_dict(kwgroups['climdata'])
-    glo_key = freeze_dict(kwgroups['glo_var'])
+    clim_key = freeze_dict(kwgroups['climdata']) if load_target else "NO_TARGET"
+    glo_key  = freeze_dict(kwgroups['glo_var'])
     index_key = freeze_dict(kwgroups['index'])
-    cache_key = (glo_var_name, clim_key, glo_key, index_key)
+    cache_key = (glo_var_name, clim_key, glo_key, index_key, bool(use_cache), bool(load_target))
 
     if not hasattr(get_data, "_cache"):
         get_data._cache = {}
@@ -30,30 +30,37 @@ def get_data(kwgroups, glo_var_name=None, workdir=None, use_cache=True):
     if cache_key in get_data._cache:
         return get_data._cache[cache_key]
 
-    # Normal execution
-    clim_data = load_climdata(**kwgroups['climdata'])
+    # -------------------------
+    # Target (optional)
+    # -------------------------
+    if load_target:
+        clim_data = load_climdata(**kwgroups['climdata'])
+    else:
+        clim_data = None
 
+    # -------------------------
+    # Global field
+    # -------------------------
     if glo_var_name == 'sst':
         glo_var_func = openDAPsst_cached if use_cache else openDAPsst
         glo_var = glo_var_func(anomalies=True, workdir=workdir, **kwgroups['glo_var'])
-
     elif glo_var_name == 'slp':
         glo_var_func = openDAPslp_cached if use_cache else openDAPslp
         glo_var = glo_var_func(anomalies=True, workdir=workdir, **kwgroups['glo_var'])
-
     else:
         raise ValueError(f"Global variable {glo_var_name} not supported.")
 
     assert not np.isnan(glo_var.data).all(), f"{glo_var_name.upper()} contains only NaNs!"
-    assert glo_var.data.shape [ 0 ] > 0, f"{glo_var_name.upper()} has no time steps!"
+    assert glo_var.data.shape[0] > 0, f"{glo_var_name.upper()} has no time steps!"
 
+    # -------------------------
+    # Index + phase masks
+    # -------------------------
     index, phaseind = create_phase_index2(**kwgroups['index'])
-    # result = (clim_data, glo_var_name, glo_var, index, phaseind)
-    # get_data._cache[cache_key] = result
-    print(f"phaseind: {phaseind}")
-    print(f"index: {index}")
 
-    return clim_data, glo_var_name, glo_var, index, phaseind
+    result = (clim_data, glo_var_name, glo_var, index, phaseind)
+    get_data._cache[cache_key] = result
+    return result
 
 def create_kwgroups(debug=False, climdata_startyr=1871, n_yrs=145,
     climdata_months=[1, 2, 3], n_mon_glo_var=3, glo_var_lag=3, n_mon_index=3, index_lag=3, n_phases=2, phases_even=True,
@@ -192,6 +199,3 @@ def create_kwgroups(debug=False, climdata_startyr=1871, n_yrs=145,
     kwgroups [ 'glo_var' ] [ 'months' ] = tuple(kwgroups [ 'glo_var' ] [ 'months' ])
     kwgroups [ 'index' ] [ 'months' ] = tuple(kwgroups [ 'index' ] [ 'months'])
     return kwgroups
-
-
-

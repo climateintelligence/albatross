@@ -6,6 +6,8 @@ import numpy as np
 from matplotlib import cm
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import pandas as pd
+import json
 
 from functools import lru_cache
 
@@ -192,38 +194,46 @@ def glo_var_Map_unfiltered(nipaPhase, cmap=cm.jet):
     fig.colorbar(im1, cax=cax, orientation='horizontal')
     return fig
 
+
 def glo_var_Map(nipaPhase, cmap=cm.jet, fig=None, ax=None):
     from mpl_toolkits.basemap import Basemap
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    import matplotlib.pyplot as plt
+    import numpy as np
+
     if fig is None:
         fig = plt.figure()
         ax = fig.add_subplot(111)
+
     m = Basemap(ax=ax, projection='cyl', lon_0=270, resolution='i')
     m.drawmapboundary(fill_color='#ffffff', linewidth=0.15)
     m.drawcoastlines(linewidth=0.15)
     m.fillcontinents(color='#eeeeee', lake_color='#ffffff')
+
     parallels = np.linspace(m.llcrnrlat, m.urcrnrlat, 4)
     meridians = np.linspace(m.llcrnrlon, m.urcrnrlon, 4)
-    m.drawparallels(parallels, linewidth=0.3, labels=[0, 0, 0, 0])
-    m.drawmeridians(meridians, linewidth=0.3, labels=[0, 0, 0, 0])
+    m.drawparallels(parallels, linewidth=0.3, labels=[ 0, 0, 0, 0 ])
+    m.drawmeridians(meridians, linewidth=0.3, labels=[ 0, 0, 0, 0 ])
 
     lons = nipaPhase.glo_var.lon
     lats = nipaPhase.glo_var.lat
-
     data = nipaPhase.corr_grid
-    levels = np.linspace(-1.0, 1.0, 41)
 
     lons, lats = np.meshgrid(lons, lats)
 
+    # Fixed color scale from -1 to +1
     im1 = m.pcolormesh(
         lons, lats, data,
-        vmin=np.nanmin(data),
-        vmax=np.nanmax(data),
+        vmin=-1.0, vmax=1.0,
         cmap=cmap,
         latlon=True
     )
+
     divider = make_axes_locatable(ax)
     cax = divider.append_axes('bottom', size='5%', pad=0.05)
-    fig.colorbar(im1, cax=cax, orientation='horizontal')
+    cbar = fig.colorbar(im1, cax=cax, orientation='horizontal')
+    cbar.set_label('Correlation coefficient')
+
     return fig, ax, m
 
 def append_model_pcs(model, pcs_file_rows):
@@ -278,3 +288,125 @@ def lag_to_month():
         15: '03',
     }
     return d
+
+def _compute_phase_thresholds(index_avg: np.ndarray, phaseind: dict) -> dict:
+    """
+    Returns thresholds + explicit labels ordering for operational classification.
+    """
+    qmap = {2: [0.5], 3: [1/3, 2/3], 4: [0.25, 0.5, 0.75], 5: [0.2, 0.4, 0.6, 0.8]}
+    labels = list(phaseind.keys())
+    nph = len(labels)
+    qs = qmap.get(nph, [])
+    thresholds = list(np.quantile(index_avg, qs)) if qs else []
+    return {
+        "n_phases": nph,
+        "labels": labels,
+        "quantiles": qs,
+        "thresholds": thresholds,
+    }
+
+def _save_phase_artifacts(workdir: Path, years: np.ndarray, index_avg: np.ndarray,
+                          phaseind: dict, thresholds: dict):
+    """
+    Save per-phase year masks and global thresholds.
+    Files written under workdir/'pc_vs_hindcast':
+      - phase_mask_<phase>.csv   (columns: year, in_phase)
+      - phase_thresholds.json    (n_phases, quantiles, thresholds[])
+      - index_training.csv       (columns: year, index_avg)
+    """
+    out_dir = workdir / "pc_vs_hindcast"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Years + index used in training
+    pd.DataFrame({"year": years.astype(int), "index_avg": index_avg.astype(float)}).to_csv(
+        out_dir / "index_training.csv", index=False
+    )
+
+    # Per-phase masks
+    for phase, mask in phaseind.items():
+        pd.DataFrame(
+            {"year": years.astype(int), "in_phase": mask.astype(bool)}
+        ).to_csv(out_dir / f"phase_mask_{phase}.csv", index=False)
+
+    # Global thresholds
+    with (out_dir / "phase_thresholds.json").open("w") as f:
+        json.dump(thresholds, f, indent=2)
+
+import json
+import numpy as np
+import pandas as pd
+from pathlib import Path
+
+def pick_phase_from_thresholds(x: float, meta: dict) -> str:
+    labels = meta["labels"]
+    thresholds = meta.get("thresholds", [])
+    if not thresholds:
+        return labels[0]
+    for thr, lab in zip(thresholds, labels):
+        if x <= float(thr):
+            return lab
+    return labels[-1]
+
+def latest_valid_index_value(index_arr) -> float:
+    arr = np.asarray(index_arr).ravel().astype(float)
+    arr = arr[np.isfinite(arr) & (arr != -999.0)]
+    if arr.size == 0:
+        raise ValueError("Index not available (all NaN/-999).")
+    return float(arr[-1])
+
+def predictors_available(glo_var_obj, index_arr) -> None:
+    _ = latest_valid_index_value(index_arr)
+    field = np.asarray(getattr(glo_var_obj, "data", glo_var_obj))
+    if field.ndim == 3:
+        field0 = field[0]
+    elif field.ndim == 2:
+        field0 = field
+    else:
+        raise ValueError(f"Unexpected glo_var field ndim={field.ndim}")
+    if not np.isfinite(field0).any():
+        raise ValueError("Global variable not available (all NaN).")
+
+def apply_saved_pcr(workdir: Path, phase: str, field_2d: np.ndarray) -> float:
+    pc_dir = Path(workdir) / "pc_vs_hindcast"
+    npz_path = pc_dir / f"pc_transform_{phase}.npz"
+    coef_path = pc_dir / f"coefficients_{phase}.csv"
+
+    if not npz_path.exists():
+        raise FileNotFoundError(f"Missing regressor package: {npz_path.name}")
+    if not coef_path.exists():
+        raise FileNotFoundError(f"Missing coefficients file: {coef_path.name}")
+
+    pack = np.load(npz_path, allow_pickle=True)
+    eofs = pack["eofs"]
+    x_mean = pack["x_mean"]
+    mask_idx = pack["mask_idx"].astype(bool)
+    n_pc = int(np.asarray(pack["n_pc"]).ravel()[0])
+
+    x_flat = np.asarray(field_2d, dtype=float).reshape(-1)
+    if x_flat.size != mask_idx.size:
+        raise ValueError(f"Grid mismatch: field={x_flat.size} vs mask={mask_idx.size}")
+
+    x_sel = x_flat[mask_idx]
+
+    # optional post-filter
+    if "keep_var" in pack and np.asarray(pack["keep_var"]).size:
+        kv = np.asarray(pack["keep_var"]).astype(bool)
+        x_sel = x_sel[kv]
+
+    if x_sel.shape[0] != x_mean.shape[0]:
+        raise ValueError(f"Feature mismatch: x_sel={x_sel.shape[0]} vs x_mean={x_mean.shape[0]}")
+
+    nan = np.isnan(x_sel)
+    if nan.any():
+        x_sel[nan] = x_mean[nan]
+
+    pcs = (x_sel - x_mean) @ eofs[:, :n_pc]
+
+    df = pd.read_csv(coef_path)
+    idx_col = [c for c in df.columns if c.lower().startswith("unnamed")]
+    if idx_col:
+        df = df.set_index(idx_col[0])
+
+    intercept = float(df.loc["Intercept", "Coefficient"])
+    betas = np.array([float(df.loc[f"PC{i+1}", "Coefficient"]) for i in range(n_pc)], dtype=float)
+    return intercept + float(pcs @ betas)

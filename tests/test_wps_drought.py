@@ -2,65 +2,41 @@ import time
 import random
 import re
 import uuid
-from pywps import Service, configuration
-from pywps.tests import client_for
-from albatross.processes.wps_drought import Drought  # Adjust if needed
 import gc
 import sys
-import os
+from urllib.parse import quote
 
-basin = "LakeComo"
-log_path = f"wps_drought_test_log_{basin}_1984_2023.txt"
+from pywps import Service, configuration
+from pywps.tests import client_for
+from albatross.processes.wps_drought import Drought
+
+basin = "ZRB"
+start_year = "1951"
+end_year = "2015"
+forecast_year_ok = "2016"  # or whatever you want
+glo_vars = ["sst"]
+indices = ["NINO 3.4"]
+target_variables = ["monthly_inflows"]
+
+log_path = f"wps_drought_test_log_{basin}_{start_year}_{end_year}.txt"
 sys.stdout = open(log_path, "w", encoding="utf-8")
-sys.stderr = sys.stdout  # optional: include errors in the same file
+sys.stderr = sys.stdout
 
 print("PyWPS Work Directory:", configuration.get_config_value("server", "workdir"))
 print(f"🧪 Starting test_wps_drought run — ID: {uuid.uuid4()}")
 
-def make_month_windows(window_size=3, start_month=1):
-    windows = []
-    for start in range(start_month, 13):
-        window = [(start + i - 1) % 12 or 12 for i in range(window_size)]
-        windows.append(",".join(map(str, window)))
-    return windows
-
-
-"""def make_month_windows(basin_name=None):
+def make_month_windows(basin_name=None):
     if basin_name == "CHIRPS_MEK":
-        return [
-            "11,12,1",
-            "2,3,4", # dry
-            "5,6,7",
-            "8,9,10"  # wet
-        ]
+        return ["11,12,1", "2,3,4", "5,6,7", "8,9,10"]
     elif basin_name == "ZRB" or basin_name == "CHIRPS_ZRB":
-        return [
-            "5,6,7",
-            "8,9,10", # dry
-            "11,12,1",
-            "2,3,4"  # wet
-        ]
+        return ["5,6,7", "8,9,10", "11,12,1", "2,3,4"]
     else:
-        return [
-            "12,1,2",  # Inverno (DJF)
-            "3,4,5",    # Primavera (MAM)
-            "6,7,8",    # Estate (JJA)
-            "9,10,11"  # Autunno (SON)
-
-    ]"""
+        return ["12,1,2", "3,4,5", "6,7,8", "9,10,11"]
 
 def test_wps_drought():
+    phase_modes = [2]
+    month_windows = make_month_windows(basin_name=basin)
 
-    # Configuration
-    window_size = 4
-    phase_modes = [2,3,4] #4] #1,2,3,4
-    month_windows = make_month_windows(window_size=window_size, start_month=1)
-    # month_windows = make_month_windows(basin_name=basin)
-    glo_vars = ['sst','slp']
-    indices = ['NAO', 'SCA', 'EAWR', 'PDO', 'AMO','AO','ONI']
-    target_variables = ['monthly_inflows']# ['monthly_inflows']#['tmax','tmin','tmean']#,'ppt']#['tmax', 'tmin', 'tmean', 'ppt']
-
-    # Download cache to avoid redundant fetches
     downloaded_data = {}
     last_data_key = None
 
@@ -69,64 +45,86 @@ def test_wps_drought():
             for index in indices:
                 data_key = (glo_var, months, index)
 
-                # Simulate/track preload
                 if data_key not in downloaded_data:
                     downloaded_data[data_key] = True
-
-                    # Add delay only when moving to a new dataset
                     if last_data_key is not None:
                         delay = random.uniform(1.5, 3.0)
                         print(f"⏳ Waiting {delay:.2f}s before new group request...")
                         time.sleep(delay)
-
                     last_data_key = data_key
 
-                # Loop over remaining parameters
                 for phase_mode in phase_modes:
                     for target_variable in target_variables:
-                        print(f"\n▶ Running test for glo_var: {glo_var} | index: {index} | "
-                              f"phase_mode: {phase_mode} | target_variable: {target_variable} | months: {months} |")
+                        print(
+                            f"\n▶ Running test for glo_var: {glo_var} | index: {index} | "
+                            f"phase_mode: {phase_mode} | target_variable: {target_variable} | months: {months} |"
+                        )
 
+                        client = None
                         try:
-                            client = client_for(Service(processes=[ Drought() ]))
+                            client = client_for(Service(processes=[Drought()]))
+
 
                             datainputs_dict = {
-                                "target": f"https://raw.githubusercontent.com/climateintelligence/albatross/refs/heads/main/albatross/data/{basin}_{target_variable}.txt",
+                                "target": (
+                                    "https://raw.githubusercontent.com/climateintelligence/albatross/"
+                                    f"refs/heads/main/albatross/data/{basin}_{target_variable}.txt"
+                                ),
                                 "indicator": index,
-                                "start_year": "1984",
-                                "end_year": "2022",
+                                "start_year": start_year,
+                                "end_year": end_year,
                                 "month": months,
                                 "phase_mode": str(phase_mode),
                                 "glo_var_name": glo_var,
+
+                                # ✅ this is what makes the process attempt operational
+                                "forecast_year": forecast_year_ok,
                             }
 
                             datainputs = ";".join(f"{k}={v}" for k, v in datainputs_dict.items())
+                            datainputs_q = quote(datainputs, safe="")  # critical
 
                             response = client.get(
-                                f"/wps?service=WPS&request=Execute&version=1.0.0&identifier=drought&datainputs={datainputs}"
+                                "/wps?service=WPS&request=Execute&version=1.0.0"
+                                "&identifier=drought"
+                                f"&datainputs={datainputs_q}"
                             )
 
-                            response_text = response.data.decode("utf-8")
+                            response_text = response.data.decode("utf-8", errors="replace")
 
-                            if response.status_code!=200 or "ProcessSucceeded" not in response_text:
+                            if response.status_code != 200 or "ProcessSucceeded" not in response_text:
                                 print("❌ WPS process failed!")
-                                match = re.search(r"<ows:ExceptionText>(.*?)</ows:ExceptionText>", response_text,
-                                                  re.DOTALL)
+                                print("HTTP:", response.status_code)
+                                match = re.search(
+                                    r"<ows:ExceptionText>(.*?)</ows:ExceptionText>",
+                                    response_text, re.DOTALL
+                                )
+                                if not match:
+                                    match = re.search(
+                                        r"<(?:\w+:)?ExceptionText>(.*?)</(?:\w+:)?ExceptionText>",
+                                        response_text, re.DOTALL
+                                    )
                                 if match:
-                                    print("---- WPS ExceptionText ----")
+                                    print("---- ExceptionText ----")
                                     print(match.group(1).strip())
+                                else:
+                                    print("---- Response (first 2000 chars) ----")
+                                    print(response_text[:2000])
                                 raise RuntimeError("Process failed.")
 
                             print("✅ Success!")
 
                         except Exception as e:
-                            print(f"⚠️  Skipping combination {target_variable}-{index}-{glo_var}-{phase_mode}-{months}, due to error: {e}")
-                            continue  # Proceed to next configuration
+                            print(
+                                f"⚠️  Skipping combination {target_variable}-{index}-{glo_var}-{phase_mode}-{months}, "
+                                f"due to error: {e}"
+                            )
+                            continue
 
                         finally:
-                            del client
+                            if client is not None:
+                                del client
                             gc.collect()
 
-        # Pause a little after each glo_var
-        if random.random() < 0.25:  # 25% dei casi
+        if random.random() < 0.25:
             time.sleep(random.uniform(1.5, 3.0))
