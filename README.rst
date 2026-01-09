@@ -2,8 +2,9 @@
 Albatross
 =========
 
-.. image:: https://img.shields.io/pypi/v/albatross.svg
-        :target: https://pypi.python.org/pypi/albatross
+.. image:: https://readthedocs.org/projects/albatross/badge/?version=latest
+        :target: https://albatross.readthedocs.io/en/latest/?version=latest
+        :alt: Documentation Status
 
 .. image:: https://img-shields.io/github/license/climateintelligence/albatross.svg
     :target: https://github.com/climateintelligence/albatross/blob/main/LICENSE
