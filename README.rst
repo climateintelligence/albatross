@@ -3,12 +3,12 @@ Albatross
 =========
 
 .. image:: https://readthedocs.org/projects/albatross/badge/?version=latest
-        :target: https://albatross.readthedocs.io/en/latest/?version=latest
-        :alt: Documentation Status
+    :target: https://albatross.readthedocs.io/en/latest/?version=latest
+    :alt: Documentation Status
 
-.. image:: https://img-shields.io/github/license/climateintelligence/albatross.svg
-    :target: https://github.com/climateintelligence/albatross/blob/main/LICENSE
-    :alt: GitHub license
+.. image:: https://img.shields.io/github/license/climateintelligence/albatross.svg
+   :target: https://github.com/climateintelligence/albatross/LICENSE
+   :alt: GitHub license
 
 ALBATROSS AS A CLIMATE SERVICE
 ==============================================================================
