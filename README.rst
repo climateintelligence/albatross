@@ -2,8 +2,8 @@
 Albatross
 =========
 
-.. image:: https://readthedocs.org/projects/albatross/badge/?version=latest
-    :target: https://albatross.readthedocs.io/en/latest/?version=latest
+.. image:: https://readthedocs.org/projects/clint-albatross/badge/?version=latest
+    :target: https://clint-albatross.readthedocs.io/en/latest/
     :alt: Documentation Status
 
 .. image:: https://img.shields.io/github/license/climateintelligence/albatross?cacheSeconds=300
@@ -141,7 +141,7 @@ Documentation
 -------------
 
 Learn more about Albatross in its official documentation at
-https://albatross.readthedocs.io.
+https://clint-albatross.readthedocs.io/en/latest/
 
 Submit bug reports, questions and feature requests at
 https://github.com/climateintelligence/albatross/issues
