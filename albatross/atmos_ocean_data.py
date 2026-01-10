@@ -285,6 +285,7 @@ def openDAPz500(anomalies: bool = True, convert_to_height_m: bool = True, **kwar
     LOGGER.info("✅  Z500 download & processing complete.")
     return seasonal_var(grid, lat, lon)
 
+
 """Function needed to allow caching of OPeNDAP data. Using it, we can avoid downloading multiple time same glo_var"""
 
 from functools import lru_cache
@@ -317,6 +318,7 @@ def openDAPslp_cached_frozen(anomalies: bool, frozen_kwargs):
 def openDAPslp_cached(anomalies=True, **kwargs):
     frozen = _freeze_kwargs(kwargs)
     return openDAPslp_cached_frozen(anomalies, frozen)
+
 
 import time
 import logging
@@ -495,7 +497,7 @@ def create_phase_index2(**kwargs):
     return index_avg, phaseind
 
 
-def load_climdata(**kwargs):
+"""def load_climdata(**kwargs):
 
     data = load_clim_file(kwargs['fp'])
     from numpy import arange, where, zeros
@@ -513,4 +515,69 @@ def load_climdata(**kwargs):
             climdata [ year ] = data.values [ mons ].mean()
         else:
             LOGGER.warning(f"No data available for year {year}, skipping mean calculation.")
+    return climdata"""
+
+def load_climdata(**kwargs):
+    """
+    Load target/clim time series and aggregate selected months per year.
+
+    Expected kwargs:
+      fp: path to file
+      months: list[int]  # e.g. [4,5,6]
+      startyr: int
+      n_year: int
+      aggregation: str  # "mean" or "sum" (aliases accepted: "average", "cumulated")
+    """
+    import numpy as np
+    from numpy import where
+    from albatross.utils import lag_to_month
+
+    data = load_clim_file(kwargs["fp"])
+
+    # --- aggregation mode ---
+    agg = str(kwargs.get("aggregation", "mean")).strip().lower()
+    aliases = {"average": "mean", "avg": "mean", "cumulated": "sum", "cumulative": "sum"}
+    agg = aliases.get(agg, agg)
+    if agg not in {"mean", "sum"}:
+        raise ValueError("aggregation must be one of: mean, sum (aliases: average, cumulated)")
+
+    reducer = np.nanmean if agg == "mean" else np.nansum
+
+    # --- locate first month index in the series ---
+    tran = lag_to_month()
+    startmon = int(tran[kwargs["months"][0]])
+    startyr = int(kwargs["startyr"])
+
+    idx0 = where((data.index.year == startyr) & (data.index.month == startmon))[0]
+    if idx0.size == 0:
+        raise ValueError(f"Start date not found in target series: {startyr}-{startmon:02d}")
+
+    idx_start = int(idx0[0])
+
+    # --- build year-by-year aggregation ---
+    n_year = int(kwargs["n_year"])
+    months = list(kwargs["months"])
+    climdata = np.full((n_year,), np.nan, dtype=float)
+
+    for y in range(n_year):
+        # indices for the selected months in that year, assuming monthly regularity
+        month_offsets = np.arange(len(months))
+        mons = idx_start + 12 * y + month_offsets
+
+        # keep only indices that are inside the series
+        mons = mons[(mons >= 0) & (mons < len(data.values))]
+
+        if mons.size == 0:
+            LOGGER.warning(f"No data available for year index {y} (year={startyr + y}); skipping.")
+            continue
+
+        vals = np.asarray(data.values)[mons].astype(float)
+
+        # If all NaN, warn and keep NaN
+        if vals.size == 0 or np.isnan(vals).all():
+            LOGGER.warning(f"All-NaN data for year index {y} (year={startyr + y}); skipping.")
+            continue
+
+        climdata[y] = reducer(vals)
+
     return climdata

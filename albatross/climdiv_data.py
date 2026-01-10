@@ -51,6 +51,10 @@ def get_data(kwgroups, glo_var_name=None, workdir=None, use_cache=True, load_tar
         glo_var_func = openDAPz500_cached if use_cache else openDAPz500
         # choose whether you want height in meters (recommended)
         glo_var = glo_var_func(anomalies=True, convert_to_height_m=True, workdir=workdir, **kwgroups [ 'glo_var' ])
+    elif glo_var_name=="olr":
+        # Option A: keep resolution fixed in code (simplest)
+        glo_var_func = openDAPolr_cached if use_cache else openDAPolr
+        glo_var = glo_var_func(anomalies=True, workdir=workdir,**kwgroups [ "glo_var" ])
 
     else:
         raise ValueError(f"Global variable {glo_var_name} not supported.")
@@ -69,7 +73,7 @@ def get_data(kwgroups, glo_var_name=None, workdir=None, use_cache=True, load_tar
 
 def create_kwgroups(debug=False, climdata_startyr=1871, n_yrs=145,
     climdata_months=[1, 2, 3], n_mon_glo_var=3, glo_var_lag=3, n_mon_index=3, index_lag=3, n_phases=2, phases_even=True,
-    index_fp=None, climdata_fp=None, glo_var_name=None):
+    index_fp=None, climdata_fp=None, glo_var_name=None, climdata_aggregation='mean'):
 
     """
     This function takes information about the seasons, years, and type of divisional
@@ -172,13 +176,15 @@ def create_kwgroups(debug=False, climdata_startyr=1871, n_yrs=145,
         print('INDEX starts in %s-%d, ends in %s-%d' %
               (i2m[index_months[0]], index_startyr, i2m[index_months[-1]], index_endyr))
 
+
         # _Create function output
     kwgroups = {
         'climdata': {'fp': climdata_fp,
                      'startyr': climdata_startyr,
                      'endyr': climdata_endyr,
                      'months': climdata_months,
-                     'n_year': n_yrs
+                     'n_year': n_yrs,
+                     'aggregation': climdata_aggregation
                      },
 
         'glo_var': {

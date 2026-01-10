@@ -105,6 +105,14 @@ class Drought(Process):
                 ),
                 supported_formats=[FORMATS.TEXT],
             ),
+            LiteralInput(
+                identifier="aggregation",
+                title="Target aggregation over season",
+                abstract="How to aggregate target months: mean (average) or sum (cumulated).",
+                data_type="string",
+                allowed_values=[ "mean", "sum" ],
+                default="mean",
+            ),
             LiteralInput(identifier="start_year", title="Start Year", default="1971", data_type="string"),
             LiteralInput(identifier="end_year", title="End Year", default="2019", data_type="string"),
             LiteralInput(identifier="month", title="Target season", default="4,5,6", data_type="string"),
@@ -126,7 +134,7 @@ class Drought(Process):
             LiteralInput(
                 identifier="glo_var_name",
                 title="Global Variable Name",
-                abstract="Global variable to use ('sst', 'z500', 'slp')",
+                abstract="Global variable to use ('sst', 'z500', 'slp','olr')",
                 data_type="string",
                 allowed_values=["sst", "slp","z500"],
                 default="sst",
@@ -145,7 +153,6 @@ class Drought(Process):
             ComplexOutput(identifier="scatter_plot", title="Scatter Plot", as_reference=True, supported_formats=[FORMAT_PDF]),
             ComplexOutput(identifier="forecast_bundle", title="All Forecast Outputs (ZIP)", as_reference=True, supported_formats=[FORMATS.ZIP]),
             ComplexOutput(identifier="glo_var_map", title="Global variable correlation map", as_reference=True, supported_formats=[FORMAT_PDF]),
-            ComplexOutput("pcs_plot", "Predicted vs Observed (PCA regression)", as_reference=True, supported_formats=[FORMAT_PDF]),
         ]
 
         super().__init__(
@@ -168,11 +175,14 @@ class Drought(Process):
         LOGGER.info("Processing...")
         response.update_status("Retrieving input data and initializing variables...", 10)
 
+
         glo_var_name = request.inputs["glo_var_name"][0].data.lower()
 
         months = list(map(int, request.inputs["month"][0].data.split(",")))
         startyr = int(request.inputs["start_year"][0].data)
         endyr = int(request.inputs["end_year"][0].data)
+        aggregation = request.inputs.get("aggregation", [ None ]) [ 0 ]
+        aggregation = aggregation.data.lower() if aggregation else "mean"
 
         M = int(request.inputs["phase_mode"][0].data)
         if M not in (1, 2, 3, 4):
@@ -182,15 +192,18 @@ class Drought(Process):
         index_file = files("albatross").joinpath("data", f"{indicator}.txt")
 
         workdir = Path(self.workdir)
+        run_id = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        run_root = workdir / f"run_{run_id}"
+        run_root.mkdir(parents=True, exist_ok=True)
 
         # Target is only for training/hindcast in this step
         pr_input = request.inputs.get("target", [None])[0]
         clim_file = resolve_target_input(pr_input, workdir)
 
         # Output dirs
-        maps_dir = workdir / f"{glo_var_name}_corr_maps"
-        scat_dir = workdir / f"scatter_plots_{glo_var_name}"
-        pc_dir = workdir / "pc_vs_hindcast"
+        maps_dir = run_root / f"{glo_var_name}_corr_maps"
+        scat_dir = run_root / f"scatter_plots_{glo_var_name}"
+        pc_dir = run_root / "pc_vs_hindcast"
         maps_dir.mkdir(parents=True, exist_ok=True)
         scat_dir.mkdir(parents=True, exist_ok=True)
         pc_dir.mkdir(parents=True, exist_ok=True)
@@ -211,6 +224,7 @@ class Drought(Process):
             index_fp=index_file,
             climdata_fp=clim_file,
             glo_var_name=glo_var_name,
+            climdata_aggregation=aggregation,
         )
 
         years = np.arange(startyr, endyr + 1)
@@ -225,7 +239,7 @@ class Drought(Process):
         # Save thresholds + per-phase masks using your utils (correct signature)
         phase_meta = _compute_phase_thresholds(index_avg=np.asarray(index_avg), phaseind=phaseind)
         _save_phase_artifacts(
-            workdir=workdir,
+            workdir=run_root,
             years=years,
             index_avg=np.asarray(index_avg),
             phaseind=phaseind,
@@ -255,7 +269,7 @@ class Drought(Process):
             model.bootcorr(corrconf=0.95)
             model.gridCheck()
             model.crossvalpcr(xval=crv_flag)
-            model.save_regressor(workdir)
+            model.save_regressor(run_root)
 
             # Hindcast rows
             ts_rows = []
@@ -309,7 +323,6 @@ class Drought(Process):
 
         # Publish WPS outputs (keep consistent with your original expectations)
         response.outputs["scatter_plot"].file = results[0]["scatter_pdf"]
-        response.outputs["pcs_plot"].file = results[0]["scatter_pdf"]
 
         if len(results) == 1:
             response.outputs["glo_var_map"].file = results[0]["filt_pdf"]
@@ -335,7 +348,7 @@ class Drought(Process):
             timeseries_rows.extend(r["timeseries_rows"])
             pcs_file_rows.extend(r["pcs_rows"])
 
-        ts_file = workdir / f"{glo_var_name}_timeseries.csv"
+        ts_file = run_root / f"{glo_var_name}_timeseries.csv"
         pd.DataFrame(timeseries_rows).sort_values("year").to_csv(ts_file, index=False)
         response.outputs["forecast_file"].file = ts_file
 
@@ -344,7 +357,6 @@ class Drought(Process):
 
         from albatross.utils import (
             predictors_available,
-            latest_valid_index_value,
             pick_phase_from_thresholds,
             apply_saved_pcr,
         )
@@ -373,7 +385,7 @@ class Drought(Process):
         if forecast_year is not None:
             try:
                 dbg(f"OP: starting forecast for year={forecast_year}, months={months}, glo_var={glo_var_name}, indicator={indicator}, M={M}")
-                dbg(f"OP: workdir={workdir}")
+                dbg(f"OP: run_root={run_root}")
                 dbg(f"OP: pc_dir={pc_dir}")
                 dbg(f"OP: pc_dir contents (pc_transform): {[ p.name for p in pc_dir.glob('pc_transform_*.npz') ]}")
 
@@ -436,7 +448,7 @@ class Drought(Process):
                 dbg(f"OP: field_2d shape={field.shape}")
 
                 dbg("OP: calling apply_saved_pcr")
-                yhat = apply_saved_pcr(workdir=workdir, phase=phase, field_2d=field)
+                yhat = apply_saved_pcr(workdir=run_root, phase=phase, field_2d=field)
                 dbg(f"OP: yhat={yhat}")
 
                 dbg("OP: writing operational_forecast.csv")
@@ -465,68 +477,37 @@ class Drought(Process):
 
         response.update_status("Packaging outputs...", 90)
 
-        zip_path = workdir / f"outputs_{indicator}.zip"
-        with zipfile.ZipFile(zip_path, "w") as zipf:
-            pack = [ ]
+        zip_path = run_root / f"outputs_{indicator}.zip"
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
+            for p in run_root.rglob("*"):
+                if p.is_file() and p!=zip_path:
+                    zipf.write(p, arcname=str(p.relative_to(run_root)))
 
-            # core tables
-            pack += [ ts_file, pcs_csv_fp ]
+        response.outputs [ "forecast_bundle" ].file = zip_path
 
-            # per-phase plots
-            for r in results:
-                pack += [ r [ "scatter_pdf" ], r [ "filt_pdf" ], r [ "full_pdf" ] ]
-
-            # shared artifacts
-            for shared in ("phase_thresholds.json", "index_training.csv", "training_config.json"):
-                pack.append(pc_dir / shared)
-
-            # regressor artifacts per phase
-            for ph in phases:
-                for fname in (
-                    f"eofs_{ph}.csv",
-                    f"coefficients_{ph}.csv",
-                    f"glo_var_mask_{ph}.npy",
-                    f"phase_mask_{ph}.csv",
-                    f"pc_transform_{ph}.npz",
-                ):
-                    pack.append(pc_dir / fname)
-
-            # operational artifacts
-            pack += [ forecast_status_fp, forecast_out_fp ]
-
-            # write unique existing files
-            seen = set()
-            for p in pack:
-                p = Path(p)
-                if p.exists() and p not in seen:
-                    zipf.write(p, arcname=p.name)
-                    seen.add(p)
-
-        # Optional: copy to Desktop (best effort; keep your original behavior)
+        # Optional: copy to Desktop (best effort; DEBUG ONLY)
         try:
             desktop_path = Path.home() / "Desktop"
             target_file = extract_target_name(clim_file)
             months_string = ",".join(map(str, months))
-            out_folder = desktop_path / f"{target_file}_{startyr}_{endyr}" / f"{target_file}_{indicator}_{glo_var_name}_{M}_{months_string}_{startyr}_{endyr}"
+
+            # Keep your original semantic folder naming
+            out_folder = (
+                desktop_path
+                / f"{target_file}_{startyr}_{endyr}"
+                / f"{target_file}_{indicator}_{glo_var_name}_{M}_{months_string}_{startyr}_{endyr}"
+            )
             out_folder.mkdir(parents=True, exist_ok=True)
 
-            to_copy = [ts_file, pcs_csv_fp, zip_path]
-            for out_id in ("scatter_plot", "glo_var_map"):
-                f = getattr(response.outputs[out_id], "file", None)
-                if f and Path(f).exists():
-                    to_copy.append(Path(f))
+            # ✅ Copy the entire run_root tree into a unique run-specific subfolder
+            # run_root should be defined earlier as: run_root = workdir / f"run_{run_id}"
+            dst_run = out_folder / run_root.name
 
-            for src in to_copy:
-                src = Path(src)
-                if src.exists():
-                    shutil.copy(src, out_folder / src.name)
+            # If rerun with same id (unlikely), replace it
+            if dst_run.exists():
+                shutil.rmtree(dst_run)
 
-            # copy pc_vs_hindcast folder
-            dst_dir = out_folder / "pc_vs_hindcast"
-            if pc_dir.exists():
-                if dst_dir.exists():
-                    shutil.rmtree(dst_dir)
-                shutil.copytree(pc_dir, dst_dir)
+            shutil.copytree(run_root, dst_run)
 
         except Exception as e:
             LOGGER.warning(f"Could not copy to Desktop: {e}")

@@ -14,9 +14,12 @@ basin = "ZRB"
 start_year = "1951"
 end_year = "2015"
 forecast_year_ok = "2025"  # or whatever you want
-glo_vars = ["z500"]
+glo_vars = ["sst"]
 indices = ["NINO 3.4"]
 target_variables = ["monthly_inflows"]
+
+aggregations = "sum"
+
 
 log_path = f"wps_drought_test_log_{basin}_{start_year}_{end_year}.txt"
 sys.stdout = open(log_path, "w", encoding="utf-8")
@@ -76,6 +79,7 @@ def test_wps_drought():
                                 "month": months,
                                 "phase_mode": str(phase_mode),
                                 "glo_var_name": glo_var,
+                                "aggregation": aggregations,
 
                                 # ✅ this is what makes the process attempt operational
                                 "forecast_year": forecast_year_ok,
