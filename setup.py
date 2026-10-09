@@ -9,7 +9,7 @@ from setuptools import setup, find_packages
 here = os.path.abspath(os.path.dirname(__file__))
 README = open(os.path.join(here, 'README.rst')).read()
 CHANGES = open(os.path.join(here, 'CHANGES.rst')).read()
-REQUIRES_PYTHON = ">=3.6.0"
+REQUIRES_PYTHON = ">=3.11,<3.12"
 
 about = {}
 with open(os.path.join(here, 'albatross', '__version__.py'), 'r') as f:
@@ -17,7 +17,7 @@ with open(os.path.join(here, 'albatross', '__version__.py'), 'r') as f:
 
 setup_requirements = ['pytest-runner', ]
 
-test_requirements = ['pytest>=3', ]
+test_requirements = ['pytest>=6,<9', ]
 
 requirements = [line.strip() for line in open('requirements.txt')]
 
@@ -32,9 +32,7 @@ classifiers = [
     'Programming Language :: Python',
     'Natural Language :: English',
     'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.5',
-    'Programming Language :: Python :: 3.6',
-    'Programming Language :: Python :: 3.7',
+    'Programming Language :: Python :: 3.11',
     'Topic :: Scientific/Engineering :: Atmospheric Science',
     'License :: OSI Approved :: Apache Software License',
 ]

@@ -1,5 +1,7 @@
 include Makefile
 include *.txt
+include *.spec
+include environment.yml
 include *.rst
 include tox.ini
 recursive-include albatross *

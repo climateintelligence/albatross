@@ -1,15 +1,28 @@
-name: nipa_env
+name: albatross
 channels:
   - conda-forge
-  - defaults
-  - anaconda
+  - nodefaults
 dependencies:
   - python=3.11
-  - pytest=8.3.5
-  - pydap
-  - numpy
-  - pandas
-  - matplotlib
   - pip
+  - click
+  - jinja2
+  - psutil
+  - pywps>=4.7,<4.8
+  # Preserve the Basemap 1.4 plotting stack used by the drought process.
+  - numpy>=1.26,<2
+  - pandas>=2.2,<3
+  - matplotlib-base>=3.8,<3.9
+  - pyshp>=2.3,<2.4
+  - packaging>=23,<24
+  # Basemap's Conda GEOS pin conflicts with the deployment's newer GDAL stack.
   - pip:
-      - -r file:requirements.txt
+      - basemap==1.4.1
+      - pyproj>=3.6,<3.7
+  - pydap>=3.5.4,<3.6
+  - scipy>=1.15,<2
+  - scikit-learn
+  - requests
+  - werkzeug
+  # tests
+  - pytest>=6,<9
