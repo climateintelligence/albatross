@@ -35,7 +35,7 @@ First activate the ``albatross`` Conda environment and install ``pytest``.
 
 .. code-block:: console
 
-   $ source activate albatross
+   $ conda activate albatross
    $ pip install -r requirements_dev.txt  # if not already installed
    OR
    $ make develop
@@ -79,10 +79,16 @@ Update the Conda specification file to build identical environments_ on a specif
 .. code-block:: console
 
   $ conda env create -f environment.yml
-  $ source activate albatross
+  $ conda activate albatross
   $ make clean
   $ make install
-  $ conda list -n albatross --explicit > spec-file.txt
+  $ conda install -c conda-forge gunicorn gevent psycopg2=2.9.12 drmaa=0.7.9 dill pytest-cov
+  $ conda list -n albatross --explicit --md5 > linux-64.spec
+
+Include the current ``wps_conda_packages`` from the Ansible playbook before
+exporting; the command above reflects the deployment packages at this update.
+Commit ``linux-64.spec`` with any changes to ``environment.yml`` and
+``requirements.txt``.
 
 .. _environments: https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#building-identical-conda-environments
 
