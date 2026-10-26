@@ -199,24 +199,41 @@ available after that date.
 Roadmap
 =======
 
-- Further teleconnection-based models selectable as an input, such as models combining
-  remote and local predictors and causal precursor discovery, under the same validation
-  protocol.
+- **Further statistical forecasting models** alongside NIPA, such as models combining
+  remote and local predictors (Ionita et al., 2008, 2020) and causal precursor discovery
+  (Di Capua et al., 2019; Vijverberg et al., 2020). The model will become an additional
+  input, with its own model-specific parameters, and all models will share the same
+  data, inputs and leave-one-out validation, so that their skill can be compared on the
+  same target.
 - Within NIPA: nonlinear identification of predictor patterns, machine-learning
   regressors, more than one principal component (with nested validation), and phase
   conditioning on the joint state of several indices.
-- Prediction intervals from the leave-one-out residuals, and longer lead times.
 
 
-Citation
-========
-
-If you use Albatross, please cite:
-
-- Zimmerman, B. G., D. J. Vimont, and P. J. Block (2016), Utilizing the state of ENSO as a
-  means for season-ahead predictor selection, *Water Resour. Res.*, 52, 3761–3774,
+References
+----------
+ 
+- Di Capua, G., M. Kretschmer, J. Runge, A. Alessandri, R. V. Donner, B. van den Hurk,
+  R. Vellore, R. Krishnan, and D. Coumou (2019), Long-lead statistical forecasts of the
+  Indian summer monsoon rainfall based on causal precursors, *Weather Forecast.*, 34,
+  1377–1394, `doi:10.1175/WAF-D-19-0002.1 <https://doi.org/10.1175/WAF-D-19-0002.1>`_.
+- Giuliani, M., M. Zaniolo, A. Castelletti, G. Davoli, and P. Block (2019), Detecting
+  the state of the climate system via artificial intelligence to improve seasonal
+  forecasts and inform reservoir operations, *Water Resour. Res.*, 55, 9133–9147,
+  `doi:10.1029/2019WR025035 <https://doi.org/10.1029/2019WR025035>`_.
+- Ionita, M., G. Lohmann, and N. Rimbu (2008), Prediction of spring Elbe discharge based
+  on stable teleconnections with winter global temperature and precipitation,
+  *J. Climate*, 21, 6215–6226,
+  `doi:10.1175/2008JCLI2248.1 <https://doi.org/10.1175/2008JCLI2248.1>`_.
+- Ionita, M., and V. Nagavciuc (2020), Forecasting low flow conditions months in advance
+  through teleconnection patterns, with a special focus on summer 2018, *Sci. Rep.*, 10,
+  `doi:10.1038/s41598-020-70060-8 <https://doi.org/10.1038/s41598-020-70060-8>`_.
+- Vijverberg, S., M. Schmeits, K. van der Wiel, and D. Coumou (2020), Subseasonal
+  statistical forecasts of Eastern U.S. hot temperature events, *Mon. Weather Rev.*,
+  148, 4799–4822, `doi:10.1175/MWR-D-19-0409.1 <https://doi.org/10.1175/MWR-D-19-0409.1>`_.
+- Zimmerman, B. G., D. J. Vimont, and P. J. Block (2016), Utilizing the state of ENSO as
+  a means for season-ahead predictor selection, *Water Resour. Res.*, 52, 3761–3774,
   `doi:10.1002/2015WR017644 <https://doi.org/10.1002/2015WR017644>`_.
-
 
 Documentation and support
 =========================
