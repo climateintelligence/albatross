@@ -123,42 +123,6 @@ products are also returned individually as WPS outputs.
   thresholds, the out-of-sample principal components and coefficients of every fold, and
   the operational model of each phase (``final_model_<phase>.npz``).
 
-Example
--------
-
-The service can be called from Python with the Birdhouse client
-`birdy <https://github.com/bird-house/birdy>`_:
-
-.. code-block:: bash
-
-    pip install birdhouse-birdy
-
-Save the following as a Python script (e.g. ``run_como.py``) and run it with
-``python run_como.py``. Replace the URL with the WPS endpoint of the service you use:
-the deployed service, or ``http://localhost:<port>/wps`` for a local instance (see
-`Installation (developers)`_).
-
-.. code-block:: python
-
-    from birdy import WPSClient
-
-    # progress=True runs the process asynchronously and shows its progress
-    wps = WPSClient("http://localhost:5000/wps", progress=True)
-
-    resp = wps.drought(
-        target="https://raw.githubusercontent.com/climateintelligence/albatross/main/albatross/data/APGD_Como.txt",
-        month="4,5,6",            # April-June
-        aggregation="sum",
-        glo_var_name="z500",
-        forecast_year="2020",     # optional
-    )
-
-    print(resp.get())             # references (URLs) to the outputs
-    # out = resp.get(asobj=True)  # download the outputs and load them
-
-The first run downloads the predictor field from NOAA PSL and can take several
-minutes.
-
 
 Method
 ======
