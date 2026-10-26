@@ -73,7 +73,7 @@ Only ``target`` and ``month`` are mandatory; all other inputs have defaults.
 |                   |           | or quartiles of the climate index.                               |
 +-------------------+-----------+------------------------------------------------------------------+
 | ``indicator``     | none      | *NIPA-specific, required if* ``phase_mode`` *> 1.* Climate index:|
-|                   |           | ``NINO 3.4``, ``NINO 12``, ``ONI``,                              |
+|                   |           | ``NINO 3.4``, ``NINO 3.4_HadiSST``, ``NINO 12``, ``ONI``,        |
 |                   |           | ``SOI``, ``DMI``, ``NAO``, ``AO``, ``PNA``, ``WP``, ``EAWR``,    |
 |                   |           | ``SCA``, ``QBO``.                                                |
 +-------------------+-----------+------------------------------------------------------------------+
@@ -126,21 +126,38 @@ products are also returned individually as WPS outputs.
 Example
 -------
 
-With the Birdhouse client `birdy <https://github.com/bird-house/birdy>`_:
+The service can be called from Python with the Birdhouse client
+`birdy <https://github.com/bird-house/birdy>`_:
+
+.. code-block:: bash
+
+    pip install birdhouse-birdy
+
+Save the following as a Python script (e.g. ``run_como.py``) and run it with
+``python run_como.py``. Replace the URL with the WPS endpoint of the service you use:
+the deployed service, or ``http://localhost:<port>/wps`` for a local instance (see
+`Installation (developers)`_).
 
 .. code-block:: python
 
     from birdy import WPSClient
 
-    wps = WPSClient("<URL of the Albatross WPS endpoint>")
+    # progress=True runs the process asynchronously and shows its progress
+    wps = WPSClient("http://localhost:5000/wps", progress=True)
+
     resp = wps.drought(
-        target="https://raw.githubusercontent.com/climateintelligence/albatross/main/albatross/data/<target file>.txt",
-        month="4,5,6",
+        target="https://raw.githubusercontent.com/climateintelligence/albatross/main/albatross/data/APGD_Como.txt",
+        month="4,5,6",            # April-June
         aggregation="sum",
         glo_var_name="z500",
-        forecast_year="2020",
+        forecast_year="2020",     # optional
     )
-    print(resp.get())
+
+    print(resp.get())             # references (URLs) to the outputs
+    # out = resp.get(asobj=True)  # download the outputs and load them
+
+The first run downloads the predictor field from NOAA PSL and can take several
+minutes.
 
 
 Method
@@ -184,6 +201,12 @@ Installation (developers)
     git clone https://github.com/climateintelligence/albatross.git
     cd albatross
     pip install -e .
+
+    # start the WPS service locally (see the Developer Guide for options)
+    albatross start
+
+The service is then available at ``http://localhost:<port>/wps``; the port is printed at
+start-up and set in the service configuration.
 
 Predictor fields are downloaded from the NOAA Physical Sciences Laboratory on first use,
 cached locally, and refreshed when a request needs months not yet in the cached copy.
