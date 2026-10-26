@@ -157,45 +157,6 @@ WPS with ``albatross.utils.apply_final_model(npz_path, field_2d, year)``, where
 grid.
 
 
-Installation (developers)
-=========================
-
-.. code-block:: bash
-
-    git clone https://github.com/climateintelligence/albatross.git
-    cd albatross
-    pip install -e .
-
-    # start the WPS service locally (see the Developer Guide for options)
-    albatross start
-
-The service is then available at ``http://localhost:<port>/wps``; the port is printed at
-start-up and set in the service configuration.
-
-Predictor fields are downloaded from the NOAA Physical Sciences Laboratory on first use,
-cached locally, and refreshed when a request needs months not yet in the cached copy.
-The following environment variables control this behaviour:
-
-+------------------------------+---------------------------------------------------------------+
-| Variable                     | Meaning                                                       |
-+==============================+===============================================================+
-| ``ALBATROSS_DATA_DIR``       | Folder of the cached predictor files (default ``~/data``).    |
-+------------------------------+---------------------------------------------------------------+
-| ``ALBATROSS_SST_NC``,        | Path of a single predictor file (SST, SLP, geopotential       |
-| ``ALBATROSS_SLP_NC``,        | height), overriding ``ALBATROSS_DATA_DIR``.                   |
-| ``ALBATROSS_HGT_NC``         |                                                               |
-+------------------------------+---------------------------------------------------------------+
-| ``ALBATROSS_REFRESH_HOURS``  | Minimum interval between two refreshes of the same file       |
-|                              | (default 24).                                                 |
-+------------------------------+---------------------------------------------------------------+
-| ``ALBATROSS_OUT_DIR``        | Folder where a copy of each run is saved (default             |
-|                              | ``~/Desktop``).                                               |
-+------------------------------+---------------------------------------------------------------+
-
-Production of the NCEP–NCAR Reanalysis 1 ended in March 2026: SLP and Z500 are not
-available after that date.
-
-
 Roadmap
 =======
 
