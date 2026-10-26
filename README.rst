@@ -213,8 +213,6 @@ Citation
 
 If you use Albatross, please cite:
 
-- Palcic, G., et al. Albatross: A Modular Climate Service for Seasonal Hydroclimatic
-  Forecasting from Teleconnections. *Climate Services* (submitted).
 - Zimmerman, B. G., D. J. Vimont, and P. J. Block (2016), Utilizing the state of ENSO as a
   means for season-ahead predictor selection, *Water Resour. Res.*, 52, 3761–3774,
   `doi:10.1002/2015WR017644 <https://doi.org/10.1002/2015WR017644>`_.
