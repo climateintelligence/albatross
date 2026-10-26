@@ -73,7 +73,7 @@ Only ``target`` and ``month`` are mandatory; all other inputs have defaults.
 |                   |           | or quartiles of the climate index.                               |
 +-------------------+-----------+------------------------------------------------------------------+
 | ``indicator``     | none      | *NIPA-specific, required if* ``phase_mode`` *> 1.* Climate index:|
-|                   |           | ``NINO 3.4``,  ``NINO 12``, ``ONI``,                             |
+|                   |           | ``NINO 3.4``,  ``NINO 12``,                                      |
 |                   |           | ``SOI``, ``DMI``, ``NAO``, ``AO``, ``PNA``, ``WP``, ``EAWR``,    |
 |                   |           | ``SCA``, ``QBO``.                                                |
 +-------------------+-----------+------------------------------------------------------------------+
@@ -178,10 +178,6 @@ References
   R. Vellore, R. Krishnan, and D. Coumou (2019), Long-lead statistical forecasts of the
   Indian summer monsoon rainfall based on causal precursors, *Weather Forecast.*, 34,
   1377–1394, `doi:10.1175/WAF-D-19-0002.1 <https://doi.org/10.1175/WAF-D-19-0002.1>`_.
-- Giuliani, M., M. Zaniolo, A. Castelletti, G. Davoli, and P. Block (2019), Detecting
-  the state of the climate system via artificial intelligence to improve seasonal
-  forecasts and inform reservoir operations, *Water Resour. Res.*, 55, 9133–9147,
-  `doi:10.1029/2019WR025035 <https://doi.org/10.1029/2019WR025035>`_.
 - Ionita, M., G. Lohmann, and N. Rimbu (2008), Prediction of spring Elbe discharge based
   on stable teleconnections with winter global temperature and precipitation,
   *J. Climate*, 21, 6215–6226,
