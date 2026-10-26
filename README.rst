@@ -182,9 +182,8 @@ The following environment variables control this behaviour:
 | ``ALBATROSS_DATA_DIR``       | Folder of the cached predictor files (default ``~/data``).    |
 +------------------------------+---------------------------------------------------------------+
 | ``ALBATROSS_SST_NC``,        | Path of a single predictor file (SST, SLP, geopotential       |
-| ``ALBATROSS_SLP_NC``,        | height, orography), overriding ``ALBATROSS_DATA_DIR``.        |
-| ``ALBATROSS_HGT_NC``,        |                                                               |
-| ``ALBATROSS_OROG_NC``        |                                                               |
+| ``ALBATROSS_SLP_NC``,        | height), overriding ``ALBATROSS_DATA_DIR``.                   |
+| ``ALBATROSS_HGT_NC``        |                                                                |
 +------------------------------+---------------------------------------------------------------+
 | ``ALBATROSS_REFRESH_HOURS``  | Minimum interval between two refreshes of the same file       |
 |                              | (default 24).                                                 |
