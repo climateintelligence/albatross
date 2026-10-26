@@ -10,162 +10,256 @@ Albatross
    :target: https://github.com/climateintelligence/albatross/blob/main/LICENSE
    :alt: GitHub license
 
-ALBATROSS AS A CLIMATE SERVICE
-==============================================================================
-
-**Albatross: A Climate Service for Seasonal Forecasting**
+**Albatross: a climate service for seasonal hydroclimatic forecasting from teleconnections**
 
   *Albatross is a bird designed for seasonal forecasting of hydroclimatic variables.*
 
-Albatross is deployed as a **Web Processing Service (WPS)**, providing a robust, accessible interface for climate analysis. It produces deterministic forecasts of seasonal hydroclimatic variables (e.g., precipitation, temperature, streamflows,...) for any given location by leveraging global teleconnections.
+Albatross is an open-source climate service implemented as an OGC **Web Processing
+Service (WPS)** with PyWPS, following the Birdhouse framework. The user supplies the
+monthly time series of a hydroclimatic variable (e.g., basin precipitation or reservoir
+inflow) and a few configuration choices. Albatross retrieves global predictor fields and
+climate indices, and returns:
 
-It is built upon the Niño Index Phase Analysis (NIPA) framework by Zimmerman et al. (2016).
+- **out-of-sample hindcasts** and their **skill relative to climatology**, obtained by
+  leave-one-out cross-validation in which every data-dependent step is re-estimated
+  without the held-out year;
+- **maps of the predictor regions** used by the model, to check whether the skill rests
+  on a documented teleconnection;
+- optionally, a **forecast** for a given year, always returned together with the skill
+  of the model that produced it;
+- the full configuration and the **calibrated model**, which can be re-applied offline.
 
-**⚡ WPS Interface Overview**
+The model currently implemented is a generalized version of the Niño Index Phase
+Analysis (NIPA; Zimmerman et al., 2016). Albatross is designed to host further
+teleconnection-based models under the same data, inputs and validation protocol.
 
-The Albatross service exposes a single core process, typically named **Drought**, which requires minimal, intuitive inputs to perform complex seasonal forecasts.
-
-**Core Inputs for the Service:**
-
-The service is designed to work with **only four mandatory user inputs** to define your forecasting problem:
-
-1.  **Input File:** The historical time series data (local file or URL).
-2.  **Start year / End year:** Define the training/forecast period.
-3.  **Target Season:** Define the season of interest (e.g., JFM, DJF).
-4.  **Phase mode:** Define the level of El Niño/La Niña phase analysis.
-
-**🚀 Operational Forecasting Modes**
-
-Albatross supports two distinct operational modes, governed by the ``End year`` parameter, allowing for seamless transition from model verification to real-time prediction.
-
-**🗓 Hindcast (Model Calibration and Verification)**
-
-This mode is used for **training, calibrating, and verifying** the predictive skill of the NIPA model using historical data.
-
-* **Goal:** To assess how well the model *would have* performed historically.
-* **Availability:** Set the ``End year`` parameter to a year **prior to the current year** (e.g., 2016).
-* **Output:** A time series of historical hindcast predictions, suitable for calculating model skill scores (R-squared, correlation, RMSE, etc.).
-
-**🔮 Operational Forecast (New Feature!)**
-
-This new mode enables the generation of predictions for the current or upcoming season using the most recent available climate index data.
-
-* **Goal:** To produce a **single, actionable prediction** for a future target season.
-* **Availability:** Set the ``End year`` parameter to the **current year** (2026) or a **future year** (e.g., 2027).
-* **Process:** The model is trained on historical data, and then uses the current month's teleconnection index value (e.g., the latest available ONI) to generate the forecast value.
-* **Output:** A single point prediction for the specified target season and year.
-
-**🔧 Detailed Input Requirements**
-
-To run the WPS, you must provide the following parameters:
-
-**📄 Input File Format**
-
--   A plain-text file containing monthly hydroclimatic data (e.g., precipitation, temperature, etc.) for a single location.
--   The file must be structured as follows:
-    -   The first line must contain the title (e.g., E-OBS\_precipitation).
-    -   The second line must include two numbers: the starting year and ending year.
-    -   The following lines must contain monthly values in row-wise format, ordered by year (12 values per year).
-
-| The file must be structured as monthly values in row-wise format, ordered by year (12 values per year).
-| **Example file:** `APGD_Como_ppt.txt <https://github.com/climateintelligence/albatross/blob/main/albatross/data/APGD_Como_ppt.txt>`_
-| (You can browse from your computer or provide a direct URL, such as a raw GitHub link)
-
-**🧾 Additional Parameters**
-
-+----------------------+----------------------------------------------------------------------------------+
-| Parameter            | Description                                                                      |
-+======================+==================================================================================+
-| Start year           | First year of the time series (e.g., 1950)                                       |
-+----------------------+----------------------------------------------------------------------------------+
-| End year             | Last year of the time series for calibration/forecast (e.g., 2023)               |
-+----------------------+----------------------------------------------------------------------------------+
-| Target Season        | Numeric code for the target season: 1 = JFM, ..., 12 = DJF                       |
-+----------------------+----------------------------------------------------------------------------------+
-| Phase mode (int)     | Whether to apply NIPA separately for El Niño and La Niña phases (1 or 2)         |
-+----------------------+----------------------------------------------------------------------------------+
+The service is deployed in the CLINT Climate Resilience Information System at DKRZ and
+can be accessed through the Phoenix web interface at https://clint.dkrz.de.
 
 
-TECHNICAL & DEVELOPMENT DETAILS
-==============================================================================
+Using the service
+=================
 
-🔍 What NIPA Does (The Method)
--------------------------------
+The service exposes one process, ``drought``.
 
-NIPA classifies historical climate data (e.g., Sea Surface Temperature, SST) according to the phases of El Niño, typically using the Oceanic Niño Index (ONI). For each phase (e.g., El Niño, La Niña, Neutral), NIPA:
+Inputs
+------
 
--   Identifies relevant spatial patterns in SST fields via linear correlation masks
--   Applies Principal Component Analysis (PCA) to reduce dimensionality
--   Calibrates a linear regression model on the first principal component to predict hydroclimatic outcomes
+Only ``target`` and ``month`` are mandatory; all other inputs have defaults.
 
-✨ What’s New in Albatross (Technical Innovations)
---------------------------------------------------
++-------------------+-----------+------------------------------------------------------------------+
+| Input             | Default   | Description                                                      |
++===================+===========+==================================================================+
+| ``target``        | (required)| Monthly time series of the target variable: an uploaded file or  |
+|                   |           | a URL (e.g., a raw GitHub link). Format below.                   |
++-------------------+-----------+------------------------------------------------------------------+
+| ``month``         | (required)| Target season as consecutive months, e.g. ``4,5,6`` (AMJ) or     |
+|                   |           | ``11,12,13,14,15`` (NDJFM). It may start in any month and extend |
+|                   |           | at most to March of the following year (``15``).                 |
++-------------------+-----------+------------------------------------------------------------------+
+| ``aggregation``   | ``mean``  | How the monthly values are aggregated over the season:           |
+|                   |           | ``mean`` (e.g., average inflow) or ``sum`` (e.g., precipitation  |
+|                   |           | totals).                                                         |
++-------------------+-----------+------------------------------------------------------------------+
+| ``start_year``,   | longest   | Analysis period. By default, the longest period covered by the   |
+| ``end_year``      | common    | target, the predictor field and, if used, the climate index.     |
+|                   | period    |                                                                  |
++-------------------+-----------+------------------------------------------------------------------+
+| ``glo_var_name``  | ``sst``   | Predictor field: ``sst`` (ERSST v5), ``slp`` or ``z500``         |
+|                   |           | (NCEP–NCAR Reanalysis 1).                                        |
++-------------------+-----------+------------------------------------------------------------------+
+| ``phase_mode``    | ``1``     | *NIPA-specific.* Number of phases: ``1`` = all years, no climate |
+|                   |           | index; ``2``, ``3``, ``4`` = years split at the median, terciles |
+|                   |           | or quartiles of the climate index.                               |
++-------------------+-----------+------------------------------------------------------------------+
+| ``indicator``     | none      | *NIPA-specific, required if* ``phase_mode`` *> 1.* Climate index:|
+|                   |           | ``NINO 3.4``, ``NINO 3.4_HadiSST``, ``NINO 12``, ``ONI``,        |
+|                   |           | ``SOI``, ``DMI``, ``NAO``, ``AO``, ``PNA``, ``WP``, ``EAWR``,    |
+|                   |           | ``SCA``, ``QBO``.                                                |
++-------------------+-----------+------------------------------------------------------------------+
+| ``forecast_year`` | none      | Year of the target season to forecast. If omitted, only          |
+|                   |           | hindcasts and skill are returned.                                |
++-------------------+-----------+------------------------------------------------------------------+
 
-Albatross extends the original NIPA framework with several innovations:
+The predictor field and the climate index are averaged over the **three months
+preceding the target season** (e.g., JFM for an AMJ target), so forecasts are issued at
+the start of the target season.
 
--   🌍 New Teleconnection Indices: In addition to ONI, Albatross incorporates other teleconnections like the North Atlantic Oscillation (NAO).
--   📉 Dynamic Dimensionality Reduction: The number of PCA components retained is dynamically chosen based on the explained variance.
--   🧠 Modular Architecture: Built to easily accommodate new climate indices, regions, and variables.
+Target file format
+------------------
 
-🔭 What’s Next
---------------
+A plain-text file with:
 
-We’re actively working on expanding Albatross with more powerful and flexible tools:
+1. a first line with a free-text description;
+2. a second line with the first and last year of the record (e.g., ``1971 2019``);
+3. the monthly values, **one year per row, January to December**, starting in January of
+   the first year, with no year column.
 
--   ➕ More Indices: Planned integration of additional teleconnections (e.g., Pacific Decadal Oscillation, Arctic Oscillation).
--   🔁 Nonlinear Relationships: Introduction of Mutual Information and other nonlinear dependency measures.
--   🤖 Machine Learning Models: Future versions will explore nonlinear models, including Random Forests, and other ML tools.
+Values must be in absolute terms (not anomalies). Missing months must be written as
+``NaN`` or as a missing-value code (``-99``, ``-99.9``, ``-999``, ...), never omitted,
+since the dates are inferred from the position of each value. Years whose target season
+contains missing months are excluded from the analysis and listed in the outputs.
 
-**🚀 Local Installation (For Developers/Advanced Users)**
+Example files are available in
+`albatross/data <https://github.com/climateintelligence/albatross/tree/main/albatross/data>`_.
 
-To run Albatross locally, contribute to the project, or deploy the PyWPS service on your own server, you must install the package from the source repository.
+Outputs
+-------
+
+Each execution returns an archive (``forecast_bundle``) containing all outputs; the main
+products are also returned individually as WPS outputs.
+
+- ``operational_forecast``: the forecast for ``forecast_year`` (if requested), with its
+  trend and teleconnection components, the phase and index value used, and the
+  leave-one-out skill of that phase.
+- ``forecast_file``: the observed target and the leave-one-out hindcast for each year.
+- ``metrics_table``: MAE, RMSE, bias, R², Pearson correlation (one-sided p-value) and skill
+  scores relative to the leave-one-out climatology, for each phase and, with more than one
+  phase, for all phases combined.
+- ``scatter_plot``: observed values against leave-one-out hindcasts, one panel per phase.
+- ``glo_var_map``: grid cells of the predictor field retained in at least half of the
+  leave-one-out folds, colored by their correlation with the target.
+- In the archive only: the run configuration (``training_config.json``), the phase
+  thresholds, the out-of-sample principal components and coefficients of every fold, and
+  the operational model of each phase (``final_model_<phase>.npz``).
+
+Example
+-------
+
+With the Birdhouse client `birdy <https://github.com/bird-house/birdy>`_:
+
+.. code-block:: python
+
+    from birdy import WPSClient
+
+    wps = WPSClient("<URL of the Albatross WPS endpoint>")
+    resp = wps.drought(
+        target="https://raw.githubusercontent.com/climateintelligence/albatross/main/albatross/data/<target file>.txt",
+        month="4,5,6",
+        aggregation="sum",
+        glo_var_name="z500",
+        forecast_year="2020",
+    )
+    print(resp.get())
+
+
+Method
+======
+
+For each phase, the generalized NIPA model performs the following steps:
+
+1. **Climate state detection** (if ``phase_mode`` > 1): years are split into phases of
+   equal size according to the climate index.
+2. **Trend removal**: a linear trend is removed from the target and from each grid cell
+   of the predictor field.
+3. **Screening**: grid cells whose correlation with the target is significant at the 5%
+   level are retained; cells poleward of 60° are excluded, and spatially isolated cells
+   are removed.
+4. **Dimensionality reduction**: the retained cells, weighted by the cosine of latitude,
+   are summarized by their leading principal component.
+5. **Regression**: the detrended target is regressed on the leading principal component
+   by ordinary least squares.
+
+**Validation.** Hindcasts are obtained by leave-one-out cross-validation within each
+phase. Steps 2–5 are re-estimated for every held-out year using only the remaining
+years, so the held-out target influences neither the retained cells nor the trend, the
+principal component or the regression. Selecting the predictor region on the full
+record and cross-validating only the regression would overestimate skill.
+
+**Forecast.** The operational model of each phase applies the same steps to all years
+of the phase. The reported skill is that of the leave-one-out hindcasts, which evaluate
+exactly this procedure on years excluded from estimation.
+
+**Offline use.** The operational model saved in the archive can be applied without the
+WPS with ``albatross.utils.apply_final_model(npz_path, field_2d, year)``, where
+``field_2d`` is the raw predictor field averaged over the same three months, on the same
+grid.
+
+
+Installation (developers)
+=========================
 
 .. code-block:: bash
 
-    # 1. Clone the repository
     git clone https://github.com/climateintelligence/albatross.git
     cd albatross
-
-    # 2. Install in editable/development mode
     pip install -e .
 
-    # Note: Ensure you have a working Python environment (3.x) and pip installed.
+Predictor fields are downloaded from the NOAA Physical Sciences Laboratory on first use,
+cached locally, and refreshed when a request needs months not yet in the cached copy.
+The following environment variables control this behaviour:
+
++------------------------------+---------------------------------------------------------------+
+| Variable                     | Meaning                                                       |
++==============================+===============================================================+
+| ``ALBATROSS_DATA_DIR``       | Folder of the cached predictor files (default ``~/data``).    |
++------------------------------+---------------------------------------------------------------+
+| ``ALBATROSS_SST_NC``,        | Path of a single predictor file (SST, SLP, geopotential       |
+| ``ALBATROSS_SLP_NC``,        | height, orography), overriding ``ALBATROSS_DATA_DIR``.        |
+| ``ALBATROSS_HGT_NC``,        |                                                               |
+| ``ALBATROSS_OROG_NC``        |                                                               |
++------------------------------+---------------------------------------------------------------+
+| ``ALBATROSS_REFRESH_HOURS``  | Minimum interval between two refreshes of the same file       |
+|                              | (default 24).                                                 |
++------------------------------+---------------------------------------------------------------+
+| ``ALBATROSS_OUT_DIR``        | Folder where a copy of each run is saved (default             |
+|                              | ``~/Desktop``).                                               |
++------------------------------+---------------------------------------------------------------+
+
+Production of the NCEP–NCAR Reanalysis 1 ended in March 2026: SLP and Z500 are not
+available after that date.
 
 
-📘 Citation
------------
+Roadmap
+=======
 
--   **Zimmerman, B. G., D. J. Vimont, and P. J. Block (2016)**, Utilizing the state of ENSO as a means for season-ahead predictor selection, Water Resour. Res., 52, 3761–3774, `doi:10.1002/2015WR017644 <https://doi.org/10.1002/2015WR017644>`_.
+- Further teleconnection-based models selectable as an input, such as models combining
+  remote and local predictors and causal precursor discovery, under the same validation
+  protocol.
+- Within NIPA: nonlinear identification of predictor patterns, machine-learning
+  regressors, more than one principal component (with nested validation), and phase
+  conditioning on the joint state of several indices.
+- Prediction intervals from the leave-one-out residuals, and longer lead times.
 
-Documentation
--------------
 
-Learn more about Albatross in its official documentation at
-https://clint-albatross.readthedocs.io/en/latest/
+Citation
+========
 
-Submit bug reports, questions and feature requests at
+If you use Albatross, please cite:
+
+- Palcic, G., et al. Albatross: A Modular Climate Service for Seasonal Hydroclimatic
+  Forecasting from Teleconnections. *Climate Services* (submitted).
+- Zimmerman, B. G., D. J. Vimont, and P. J. Block (2016), Utilizing the state of ENSO as a
+  means for season-ahead predictor selection, *Water Resour. Res.*, 52, 3761–3774,
+  `doi:10.1002/2015WR017644 <https://doi.org/10.1002/2015WR017644>`_.
+
+
+Documentation and support
+=========================
+
+Documentation: https://clint-albatross.readthedocs.io/en/latest/
+
+Bug reports, questions and feature requests:
 https://github.com/climateintelligence/albatross/issues
 
 Contributing
 ------------
 
-You can find information about contributing in our `Developer Guide`_.
-
-Please use bumpversion_ to release a new version.
+See the `Developer Guide`_. Please use bumpversion_ to release a new version.
 
 License
 -------
 
-* Free software: Apache Software License 2.0
-* Documentation: https://albatross.readthedocs.io.
-
+Apache Software License 2.0.
 
 Credits
 -------
 
-This package was created with Cookiecutter_ and the `bird-house/cookiecutter-birdhouse`_ project template.
+This package was created with Cookiecutter_ and the `bird-house/cookiecutter-birdhouse`_
+project template. Developed within the CLINT project (Horizon 2020, grant agreement
+101003876).
 
 .. _Cookiecutter: https://github.com/audreyr/cookiecutter
 .. _`bird-house/cookiecutter-birdhouse`: https://github.com/bird-house/cookiecutter-birdhouse
-.. _`Developer Guide`: https://albatross.readthedocs.io/en/latest/dev_guide.html
-.. _bumpversion: https://albatross.readthedocs.io/en/latest/dev_guide.html#bump-a-new-version
+.. _`Developer Guide`: https://clint-albatross.readthedocs.io/en/latest/dev_guide.html
+.. _bumpversion: https://clint-albatross.readthedocs.io/en/latest/dev_guide.html#bump-a-new-version
