@@ -73,7 +73,7 @@ Only ``target`` and ``month`` are mandatory; all other inputs have defaults.
 |                   |           | or quartiles of the climate index.                               |
 +-------------------+-----------+------------------------------------------------------------------+
 | ``indicator``     | none      | *NIPA-specific, required if* ``phase_mode`` *> 1.* Climate index:|
-|                   |           | ``NINO 3.4``, ``NINO 3.4_HadiSST``, ``NINO 12``, ``ONI``,        |
+|                   |           | ``NINO 3.4``,  ``NINO 12``, ``ONI``,                             |
 |                   |           | ``SOI``, ``DMI``, ``NAO``, ``AO``, ``PNA``, ``WP``, ``EAWR``,    |
 |                   |           | ``SCA``, ``QBO``.                                                |
 +-------------------+-----------+------------------------------------------------------------------+
