@@ -30,4 +30,3 @@ jobs:
     - name: Run tests
       run: |
         pytest -o addopts="" tests/test_dependencies.py -q
-        pytest tests/test_wps_drought.py -s

@@ -2,11 +2,10 @@
 """
 Module for loading climate division data for running NIPA
 """
-
 from albatross.atmos_ocean_data import create_phase_index2, load_climdata, openDAPsst, openDAPslp, openDAPsst_cached, openDAPslp_cached, openDAPz500, openDAPz500_cached
 from albatross.utils import int_to_month
+from albatross.hgt_levels import level_of
 
-from functools import lru_cache
 import json
 import numpy as np
 
@@ -43,18 +42,25 @@ def get_data(kwgroups, glo_var_name=None, workdir=None, use_cache=True, load_tar
     # -------------------------
     if glo_var_name == 'sst':
         glo_var_func = openDAPsst_cached if use_cache else openDAPsst
-        glo_var = glo_var_func(anomalies=True, workdir=workdir, **kwgroups['glo_var'])
+        glo_var = glo_var_func(workdir=workdir, **kwgroups['glo_var'])
     elif glo_var_name == 'slp':
         glo_var_func = openDAPslp_cached if use_cache else openDAPslp
-        glo_var = glo_var_func(anomalies=True, workdir=workdir, **kwgroups['glo_var'])
+        glo_var = glo_var_func(workdir=workdir, **kwgroups['glo_var'])
     elif glo_var_name=='z500':
         glo_var_func = openDAPz500_cached if use_cache else openDAPz500
         # choose whether you want height in meters (recommended)
-        glo_var = glo_var_func(anomalies=True, convert_to_height_m=True, workdir=workdir, **kwgroups [ 'glo_var' ])
-    elif glo_var_name=="olr":
-        # Option A: keep resolution fixed in code (simplest)
-        glo_var_func = openDAPolr_cached if use_cache else openDAPolr
-        glo_var = glo_var_func(anomalies=True, workdir=workdir,**kwgroups [ "glo_var" ])
+        glo_var = glo_var_func(convert_to_height_m=True, workdir=workdir, **kwgroups [ 'glo_var' ])
+    elif glo_var_name in ("tp", "tp_trop", "t2m"):
+        from albatross.era5_loader import openERA5, openERA5_cached
+        f = openERA5_cached if use_cache else openERA5
+        glo_var = f(var=glo_var_name, workdir=workdir, **kwgroups['glo_var'])
+
+    elif level_of(glo_var_name) is not None:
+        # altri livelli di geopotenziale (es. z50, z100): stratosfera e alta troposfera
+        from albatross.hgt_levels import load_hgt, load_hgt_cached
+        lev = level_of(glo_var_name)
+        glo_var = (load_hgt_cached(lev, **kwgroups['glo_var']) if use_cache
+                   else load_hgt(lev, **kwgroups['glo_var']))
 
     else:
         raise ValueError(f"Global variable {glo_var_name} not supported.")
@@ -65,7 +71,12 @@ def get_data(kwgroups, glo_var_name=None, workdir=None, use_cache=True, load_tar
     # -------------------------
     # Index + phase masks
     # -------------------------
-    index, phaseind = create_phase_index2(**kwgroups['index'])
+    if kwgroups['index']['n_phases'] == 1:
+        n_year = kwgroups['index']['n_year']
+        index = np.full(n_year, np.nan)                     # nessun indice: fase unica
+        phaseind = {'allyears': np.ones(n_year, dtype=bool)}
+    else:
+        index, phaseind = create_phase_index2(**kwgroups['index'])
 
     result = (clim_data, glo_var_name, glo_var, index, phaseind)
     get_data._cache[cache_key] = result
@@ -189,6 +200,7 @@ def create_kwgroups(debug=False, climdata_startyr=1871, n_yrs=145,
 
         'glo_var': {
             'glo_var_name': glo_var_name,
+            'lag': glo_var_lag,
             'n_mon': n_mon_glo_var,
             'months': glo_var_months,
             'startyr': glo_var_startyr,
@@ -196,6 +208,7 @@ def create_kwgroups(debug=False, climdata_startyr=1871, n_yrs=145,
         },
 
         'index': {'n_mon': n_mon_index,
+                  'lag': index_lag,
                   'months': index_months,
                   'startyr': index_startyr,
                   'endyr': index_endyr,
