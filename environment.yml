@@ -21,8 +21,7 @@ dependencies:
       - pyproj>=3.6,<3.7
   - pydap>=3.5.4,<3.6
   - scipy>=1.15,<2
+  - netcdf4
   - scikit-learn
   - requests
   - werkzeug
-  # tests
-  - pytest>=6,<9

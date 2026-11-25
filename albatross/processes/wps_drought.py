@@ -1,13 +1,13 @@
 # albatross/processes/wps_drought.py
 #
-# Skill: LOOCV senza leakage. Per ogni anno i, maschera (bootcorr + gridCheck), PCA e
-#   regressione sono stimate SOLO sugli altri n-1 anni (NIPAphase.loocv_hindcast).
-# Forecast: per ogni fase, modello operativo con gli stessi passi stimati su tutti gli
-#   anni della fase (NIPAphase.fit_final), salvato nel bundle e riapplicabile offline
-#   (utils.apply_final_model). Con forecast_year lo si applica al predittore osservato
-#   nei mesi che precedono la stagione target di quell'anno.
+# Skill: leakage-free LOOCV. For each year i, the mask (bootcorr + gridCheck), PCA and
+#   regression are estimated ONLY on the other n-1 years (NIPAphase.loocv_hindcast).
+# Forecast: for each phase, an operational model with the same steps estimated on all
+#   years of the phase (NIPAphase.fit_final), saved in the bundle and applicable offline
+#   (utils.apply_final_model). With forecast_year it is applied to the predictor observed
+#   in the months preceding the target season of that year.
 #
-# Con phase_mode=1 l'indice climatico non viene caricato ne' usato.
+# With phase_mode=1 the climate index is neither loaded nor used.
 
 # Standard library imports
 import json
@@ -62,27 +62,27 @@ FORMAT_PDF = Format("image/pdf", extension=".pdf", encoding="base64")
 FORMAT_CSV = Format("text/csv", extension=".csv")
 np.random.seed(42)
 random.seed(42)
-lag = 3                 # mesi di lag e lunghezza della stagione dei predittori
+lag = 3                 # lag in months and length of the predictor window
 
-# Impostazioni LOOCV (stesse delle run Como/Giava discusse)
+# LOOCV settings
 LOOCV_CFG = dict(
-    corrconf=0.95,      # significativita' della correlazione pixel-target
-    bootconf=0.80,      # usato solo se quick=False
-    ntim=1000,          # bootstrap, usato solo se quick=False
-    quick=True,         # True = niente bootstrap, solo t-test
-    n_pc_fixed=1,       # None = scelta per varianza spiegata (0.75)
-    regressor="ols",    # "ols" oppure "ridge"
-    detrend=True,      # True = trend lineare tolto in ogni fold (stimato sul solo training)
+    corrconf=0.95,      # significance level of the pixel-target correlation
+    bootconf=0.80,      # used only if quick=False
+    ntim=1000,          # bootstrap samples, used only if quick=False
+    quick=True,         # True = no bootstrap, t-test only
+    n_pc_fixed=1,       # None = chosen by explained variance (0.75)
+    regressor="ols",    # "ols" or "ridge"
+    detrend=True,      # True = linear trend removed in each fold (estimated on the training years only)
 )
-MAP_KEEP_FREQ = 0.5     # pixel mostrati in mappa: tenuti in almeno questa frazione di fold
+MAP_KEEP_FREQ = 0.5     # pixels shown in the map: retained in at least this fraction of folds
 
 
 # -----------------------------------------------------------------------------
-# Helpers locali
+# Local helpers
 # -----------------------------------------------------------------------------
 def _skill_vs_baseline(y_obs, y_est, y_clim, eps=1e-12):
-    """SS rispetto a una baseline fornita (per la riga 'overall': climatologia
-    LOO condizionata per fase, non una climatologia unica sugli anni aggregati)."""
+    """SS relative to a given baseline (for the 'overall' row: LOO climatology
+    conditioned on the phase, not a single climatology over the pooled years)."""
     y = np.asarray(y_obs, dtype=float).ravel()
     yhat = np.asarray(y_est, dtype=float).ravel()
     clim = np.asarray(y_clim, dtype=float).ravel()
@@ -97,15 +97,15 @@ def _skill_vs_baseline(y_obs, y_est, y_clim, eps=1e-12):
 
 
 def _loo_climatology(y):
-    """Climatologia LOO sull'intero campione (tutti gli anni, ignorando le fasi): media
-    degli altri n-1 anni. E' lo stesso riferimento della riga 'allyears' con M=1, quindi
-    la riga 'overall' con M>1 e' direttamente confrontabile con M=1."""
+    """LOO climatology over the whole sample (all years, ignoring phases): mean of the
+    other n-1 years. It is the same reference as the 'allyears' row with M=1, so the
+    'overall' row with M>1 is directly comparable with M=1."""
     y = np.asarray(y, dtype=float)
     return (y.sum() - y) / (y.size - 1)
 
 
 def _save_loocv_scatters_pdf(phase_models, out_pdf):
-    """Scatter osservato vs hindcast LOOCV. Non richiede lin_model (che in LOOCV non esiste)."""
+    """Scatter of observed against LOOCV hindcast. Does not require lin_model (absent in LOOCV)."""
     nph = len(phase_models)
     nrows, ncols = _grid_shape(nph, max_cols=3)
     fig, axes = plt.subplots(nrows, ncols, figsize=(3.8 * ncols, 3.8 * nrows), squeeze=False)
@@ -148,7 +148,7 @@ def _save_loocv_scatters_pdf(phase_models, out_pdf):
     plt.close(fig)
 
 def _opt(request, name):
-    """Valore di un input opzionale come stringa, None se assente o vuoto."""
+    """Value of an optional input as a string, None if missing or empty."""
     inp = request.inputs.get(name)
     if not inp or inp[0].data is None:
         return None
@@ -157,12 +157,12 @@ def _opt(request, name):
 
 
 def _ym(y, m):
-    """Mese assoluto. m puo' essere <= 0 (anno precedente) o > 12 (anno successivo)."""
+    """Absolute month. m can be <= 0 (previous year) or > 12 (following year)."""
     return y * 12 + m - 1
 
 
 def _series_coverage(fp):
-    """Primo e ultimo mese con dato valido di un file txt (target o indice)."""
+    """First and last month with valid data in a txt file (target or index)."""
     s = load_clim_file(fp)
     ok = np.isfinite(np.asarray(s.values, dtype=float))
     if not ok.any():
@@ -172,15 +172,12 @@ def _series_coverage(fp):
 
 
 def _predictor_coverage(glo_var_name):
-    """Primo e ultimo mese del campo predittore (file PSL locale); None se non verificabile."""
+    """First and last month of the predictor field (local PSL file); None if it cannot be checked."""
     import netCDF4
     from albatross.atmos_ocean_data import ensure_local
-    from albatross.hgt_levels import level_of
     key = {"sst": "sst", "slp": "slp", "z500": "hgt"}.get(glo_var_name)
-    if key is None and level_of(glo_var_name) is not None:
-        key = "hgt"
     if key is None:
-        return None                    # ERA5: copertura non verificata qui
+        return None
     with netCDF4.Dataset(ensure_local(key)) as ds:
         t = ds["time"]
         cal = getattr(t, "calendar", "standard")
@@ -189,25 +186,31 @@ def _predictor_coverage(glo_var_name):
     return _ym(d0.year, d0.month), _ym(d1.year, d1.month)
 
 
-def _default_years(target_cov, months, others):
-    """Primo e ultimo anno con stagione target completa nel target e con i `lag` mesi
-    precedenti coperti da tutti gli altri campi (predittore, indice)."""
-    t0, t1 = target_cov
-    sy, ey = t0 // 12, t1 // 12
+def _fmt_ym(k):
+    """Absolute month -> 'YYYY-MM'."""
+    return f"{k // 12}-{k % 12 + 1:02d}"
+
+
+def _period_limits(sources, months):
+    """First and last admissible year for each source.
+    sources: dict name -> (coverage (first, last absolute month), role), with role
+    "target" (must cover the season) or "predictor" (must cover the `lag` months
+    preceding the season: predictor field and index).
+    Returns dict name -> (first year, last year, coverage)."""
     m0, m1 = months[0], months[-1]
-    while _ym(sy, m0) < t0:
-        sy += 1
-    while _ym(ey, m1) > t1:
-        ey -= 1
-    for first, last in others:
-        while _ym(sy, m0 - lag) < first:
+    out = {}
+    for name, ((first, last), role) in sources.items():
+        if role == "target":
+            lo_month, hi_month = m0, m1
+        else:
+            lo_month, hi_month = m0 - lag, m0 - 1
+        sy, ey = first // 12 - 1, last // 12 + 1
+        while _ym(sy, lo_month) < first:
             sy += 1
-        while _ym(ey, m0 - 1) > last:
+        while _ym(ey, hi_month) > last:
             ey -= 1
-    if ey < sy:
-        raise ValueError("The target series, predictor field and climate index have no "
-                         "common period for this target season.")
-    return sy, ey
+        out[name] = (sy, ey, (first, last))
+    return out
 
 
 # -----------------------------------------------------------------------------
@@ -215,60 +218,113 @@ def _default_years(target_cov, months, others):
 # -----------------------------------------------------------------------------
 class Drought(Process):
     def __init__(self):
+        # Inputs in the order of the web interface. Identifiers are kept unchanged
+        # for programmatic clients.
         inputs = [
             ComplexInput(
                 identifier="target",
-                title="Target time series",
-                abstract="Plain-text file: description, first and last year, then monthly values "
-                        "(one year per row, Jan-Dec). Missing values as NaN or <= -99.",
+                title="Target variable",
+                abstract="Monthly time series of the target, as a plain-text file (upload or URL). "
+                         "Line 1: description. Line 2: first and last year. Then one row per year "
+                         "with the 12 monthly values (Jan-Dec). Missing values as NaN or <= -99.",
                 supported_formats=[FORMATS.TEXT],
             ),
             LiteralInput(
+                identifier="month",
+                title="Target season",
+                abstract="Comma-separated consecutive months, e.g. 3,4,5 for March-May. Months of "
+                         "the following year are numbered 13-15, e.g. 11,12,13,14,15 for November-March.",
+                data_type="string",
+            ),
+            LiteralInput(
                 identifier="aggregation",
-                title="Target aggregation over season",
-                abstract="How to aggregate target months: mean (average) or sum (cumulated).",
+                title="Temporal aggregation",
+                abstract="Aggregation of the monthly target values over the target season: "
+                         "mean (default) or sum. Skill is identical; only the unit changes.",
                 data_type="string",
                 allowed_values=["mean", "sum"],
                 default="mean",
             ),
-            LiteralInput(identifier="start_year", title="Start year",
-                        abstract="Default: first year covered by target, predictor and (if used) index.",
-                        data_type="string", min_occurs=0),
-            LiteralInput(identifier="end_year", title="End year",
-                        abstract="Default: last year covered by target, predictor and (if used) index.",
-                        data_type="string", min_occurs=0),
-            LiteralInput(identifier="month", title="Target season",
-                abstract="Consecutive months, e.g. 4,5,6 or 11,12,13,14,15 (up to March of the following year).",
-                data_type="string"),
-            LiteralInput(identifier="indicator", title="Climate index",
-                abstract="Required if phase_mode > 1.", data_type="string",
-                allowed_values=["SCA", "EAWR", "AO", "ONI", "DMI", "SOI", "WP", "PNA", "NAO", "QBO",
-                                "NINO 3.4", "NINO 12", "NINO 3.4_HadiSST"],
-                min_occurs=0),
-            LiteralInput(identifier="phase_mode", title="Number of phases",
-                abstract="1 = all years, no climate index (default); 2-4 require 'indicator'.",
-                data_type="string", allowed_values=["1", "2", "3", "4"], default="1"),
-            LiteralInput(identifier="glo_var_name", title="Predictor field",
-                abstract="Default: sst.", data_type="string",
-                allowed_values=["sst", "slp", "z500"], default="sst"),
+            LiteralInput(
+                identifier="start_year",
+                title="Analysis period: start year",
+                abstract="Optional. Default: first year covered by the target series, the "
+                         "predictor field and, if used, the climate index.",
+                data_type="string",
+                min_occurs=0,
+            ),
+            LiteralInput(
+                identifier="end_year",
+                title="Analysis period: end year",
+                abstract="Optional. Default: last year covered by the target series, the "
+                         "predictor field and, if used, the climate index.",
+                data_type="string",
+                min_occurs=0,
+            ),
+            LiteralInput(
+                identifier="glo_var_name",
+                title="Predictor field",
+                abstract="Global field used as predictor: sst (default), slp or z500.",
+                data_type="string",
+                allowed_values=["sst", "slp", "z500"],
+                default="sst",
+            ),
+            LiteralInput(
+                identifier="phase_mode",
+                title="Phase conditioning: number of phases",
+                abstract="1 (default): all years, no climate index. 2-4: years split into phases "
+                         "of the climate index below.",
+                data_type="string",
+                allowed_values=["1", "2", "3", "4"],
+                default="1",
+            ),
+            LiteralInput(
+                identifier="indicator",
+                title="Phase conditioning: climate index",
+                abstract="Index used to split the years into phases. Required with more than one "
+                         "phase; with one phase it has no effect.",
+                data_type="string",
+                allowed_values=["none", "SCA", "EAWR", "AO", "DMI", "SOI", "WP", "PNA", "NAO",
+                                "QBO", "NINO 3.4", "NINO 12"],
+                default="none",
+                min_occurs=0,
+            ),
             LiteralInput(
                 identifier="forecast_year",
-                title="Forecast year (optional)",
-                abstract="Year of the target season to forecast. The model calibrated on all training "
-                         "years is applied to the predictor field and index observed in the months "
-                         "preceding the target season of that year.",
+                title="Forecast year",
+                abstract="Optional. Year of the target season to forecast: the model calibrated on "
+                         "all years is applied to the predictor field (and index) observed in the "
+                         "three months preceding the target season of that year.",
                 data_type="string",
                 min_occurs=0,
             ),
         ]
 
+        # Outputs in the order of the web interface. Identifiers are kept unchanged
+        # for programmatic clients.
         outputs = [
-            ComplexOutput(identifier="forecast_file", title="LOOCV hindcast time series", as_reference=True, supported_formats=[FORMATS.TEXT]),
-            ComplexOutput(identifier="scatter_plot", title="Scatter Plot", as_reference=True, supported_formats=[FORMAT_PDF]),
-            ComplexOutput(identifier="forecast_bundle", title="All Outputs (ZIP)", as_reference=True, supported_formats=[FORMATS.ZIP]),
-            ComplexOutput(identifier="glo_var_map", title="Correlation of pixels retained in >= half of LOOCV folds", as_reference=True, supported_formats=[FORMAT_PDF]),
-            ComplexOutput(identifier="metrics_table", title="Metrics table by phase (CSV)", as_reference=True, supported_formats=[FORMAT_CSV]),
-            ComplexOutput(identifier="operational_forecast", title="Operational forecast with phase skill (CSV)", as_reference=True, supported_formats=[FORMAT_CSV]),
+            ComplexOutput(identifier="operational_forecast", title="Forecast",
+                          abstract="Forecast for the forecast year, with its trend and teleconnection "
+                                   "components and the leave-one-out skill of the model (CSV).",
+                          as_reference=True, supported_formats=[FORMAT_CSV]),
+            ComplexOutput(identifier="metrics_table", title="Metrics table",
+                          abstract="Errors, correlation and skill scores of the leave-one-out hindcasts, "
+                                   "for each phase and for all phases combined (CSV).",
+                          as_reference=True, supported_formats=[FORMAT_CSV]),
+            ComplexOutput(identifier="forecast_file", title="Hindcast table",
+                          abstract="Observed target and leave-one-out hindcast for each year (CSV).",
+                          as_reference=True, supported_formats=[FORMATS.TEXT]),
+            ComplexOutput(identifier="glo_var_map", title="Predictor maps",
+                          abstract="Cells retained in at least half of the leave-one-out folds, colored "
+                                   "by their correlation with the target, one panel per phase (PDF).",
+                          as_reference=True, supported_formats=[FORMAT_PDF]),
+            ComplexOutput(identifier="scatter_plot", title="Scatter plots",
+                          abstract="Observed against leave-one-out hindcast, one panel per phase (PDF).",
+                          as_reference=True, supported_formats=[FORMAT_PDF]),
+            ComplexOutput(identifier="forecast_bundle", title="All outputs",
+                          abstract="Archive with all outputs, the configuration, the target series used "
+                                   "and the operational model of each phase (ZIP).",
+                          as_reference=True, supported_formats=[FORMATS.ZIP]),
         ]
 
         super().__init__(
@@ -303,9 +359,13 @@ class Drought(Process):
         aggregation = (_opt(request, "aggregation") or "mean").lower()
         M = int(_opt(request, "phase_mode") or 1)
         indicator = _opt(request, "indicator")
+        if indicator is not None and indicator.strip().lower() == "none":
+            indicator = None
         if M > 1:
             if indicator is None:
-                raise ValueError("indicator is required when phase_mode > 1.")
+                raise ValueError(f"With {M} phases a climate index is required: select one in "
+                                 f"'Phase conditioning: climate index', or set the number of "
+                                 f"phases to 1.")
             indicator = indicator.upper()
             index_file = files("albatross").joinpath("data", f"{indicator}.txt")
         else:
@@ -323,22 +383,42 @@ class Drought(Process):
         run_root = workdir / f"run_{run_id}"
         run_root.mkdir(parents=True, exist_ok=True)
         clim_file = resolve_target_input(pr_input, workdir)
-        pc_dir = run_root / "pc_vs_hindcast"
+        pc_dir = run_root / "model"
         pc_dir.mkdir(parents=True, exist_ok=True)
 
+        # Admissible period: target season covered by the target series, predictor window
+        # covered by the field and (with phases) by the index. A user-given year outside
+        # this period is an error; by default the whole admissible period is used.
+        sources = {"target series": (_series_coverage(clim_file), "target")}
+        pc = _predictor_coverage(glo_var_name)
+        if pc is not None:
+            sources[f"{glo_var_name.upper()} field"] = (pc, "predictor")
+        if M > 1:
+            sources[f"{indicator} index"] = (_series_coverage(index_file), "predictor")
+        limits = _period_limits(sources, months)
+        first_ok = max(v[0] for v in limits.values())
+        last_ok = min(v[1] for v in limits.values())
+        season_txt = ",".join(map(str, months))
+        if last_ok < first_ok:
+            raise ValueError(
+                f"The target series, predictor field and climate index have no common period "
+                f"for season {season_txt}.")
+
         sy_in, ey_in = _opt(request, "start_year"), _opt(request, "end_year")
-        if sy_in is None or ey_in is None:
-            others = []
-            pc = _predictor_coverage(glo_var_name)
-            if pc is not None:
-                others.append(pc)
-            if M > 1:
-                others.append(_series_coverage(index_file))
-            d_sy, d_ey = _default_years(_series_coverage(clim_file), months, others)
-        startyr = int(sy_in) if sy_in else d_sy
-        endyr = int(ey_in) if ey_in else d_ey
+        startyr = int(sy_in) if sy_in else first_ok
+        endyr = int(ey_in) if ey_in else last_ok
         if endyr < startyr:
             raise ValueError(f"end_year ({endyr}) is before start_year ({startyr}).")
+        if startyr < first_ok:
+            name = max(limits, key=lambda k: limits[k][0])
+            raise ValueError(
+                f"start_year {startyr} is not valid for season {season_txt}: the {name} starts "
+                f"in {_fmt_ym(limits[name][2][0])}. The first valid start_year is {first_ok}.")
+        if endyr > last_ok:
+            name = min(limits, key=lambda k: limits[k][1])
+            raise ValueError(
+                f"end_year {endyr} is not valid for season {season_txt}: the {name} ends "
+                f"in {_fmt_ym(limits[name][2][1])}. The last valid end_year is {last_ok}.")
         LOGGER.info(f"Analysis period: {startyr}-{endyr}")
 
         response.update_status("Loading training data...", 20)
@@ -367,7 +447,7 @@ class Drought(Process):
         )
 
         # -------------------------
-        # Drop anni con target NaN (tutti i vettori restano allineati)
+        # Drop years with NaN target (all vectors stay aligned)
         # -------------------------
         target = np.asarray(target, dtype=float)
         valid = np.isfinite(target)
@@ -381,16 +461,16 @@ class Drought(Process):
             phaseind = {k: np.asarray(v)[valid] for k, v in phaseind.items()}
             years = years[valid]
 
-        # Indice richiesto solo se si usano le fasi
+        # Index required only when phases are used
         if M > 1:
             bad_idx = ~np.isfinite(np.asarray(index_avg, dtype=float))
             if bad_idx.any():
                 raise ValueError(f"Index {indicator} missing for training years {years[bad_idx].tolist()}")
 
         # -------------------------
-        # Anomalie del predittore.
-        # La climatologia e' una costante per pixel: la centratura dentro ogni fold
-        # (x_mean del training) la annulla, quindi non introduce leakage nella LOOCV.
+        # Predictor anomalies.
+        # The climatology is a per-pixel constant: centering within each fold
+        # (training x_mean) cancels it, so it introduces no leakage in the LOOCV.
         # -------------------------
         clim_2d = np.nanmean(np.asarray(glo_var.data), axis=0)
         glo_var = type(glo_var)(np.asarray(glo_var.data) - clim_2d[None, :, :], glo_var.lat, glo_var.lon)
@@ -398,7 +478,7 @@ class Drought(Process):
         phases = list(phaseind.keys())
 
         phase_meta = _compute_phase_thresholds(index_avg=np.asarray(index_avg, dtype=float), phaseind=phaseind)
-        if M > 1:   # con una sola fase non ci sono soglie
+        if M > 1:   # with a single phase there are no thresholds
             (pc_dir / "phase_thresholds.json").write_text(json.dumps(phase_meta, indent=2))
 
         training_config = {
@@ -436,15 +516,15 @@ class Drought(Process):
 
             model.hindcast = model.loocv_hindcast(**LOOCV_CFG, t=np.asarray(model.years, dtype=float))
 
-            # Modello operativo: stessi passi, stimati su tutti gli anni della fase
+            # Operational model: same steps, estimated on all years of the phase
             model.fit_final(t=np.asarray(model.years, dtype=float), **LOOCV_CFG)
             model.save_final_model(pc_dir, clim_2d)
 
-            # Mappa (solo visualizzazione, non entra nella skill):
-            # pixel tenuti in almeno MAP_KEEP_FREQ dei fold, colorati con la r su tutta la fase.
+            # Map (display only, not used in the skill):
+            # pixels retained in at least MAP_KEEP_FREQ of the folds, colored by r over the whole phase.
             freq = model.loocv_keep_freq
             shown = freq >= MAP_KEEP_FREQ
-            if detrend_on:   # stessa natura dei campi usati nei fold: senza trend (sull'intera fase)
+            if detrend_on:   # consistent with the fields used in the folds: detrended (over the whole phase)
                 r_full = vcorr(X=linear_detrend(model.years, np.asarray(model.glo_var.data)),
                                y=linear_detrend(model.years, np.asarray(model.clim_data, dtype=float)))
             else:
@@ -456,9 +536,9 @@ class Drought(Process):
                                 lat=np.asarray(model.glo_var.lat), lon=np.asarray(model.glo_var.lon),
                                 years=model.years)
 
-            # PC OUT-OF-SAMPLE: per ogni anno, la sua proiezione sulle EOF del fold che lo
-            # esclude, con i coefficienti di quel fold (sono le PC che producono l'hindcast).
-            # Osservato e hindcast sono in <var>_timeseries.csv.
+            # OUT-OF-SAMPLE PCs: for each year, its projection onto the EOFs of the fold that
+            # excludes it, with that fold's coefficients (the PCs that produce the hindcast).
+            # Observed values and hindcasts are in hindcasts.csv.
             npc = np.asarray(model.loocv_npc_oos)
             kmax = int(npc.max()) if npc.size else 0
             oos = {"year": np.asarray(model.years, dtype=int),
@@ -472,7 +552,7 @@ class Drought(Process):
 
             y_obs = np.asarray(model.clim_data, dtype=float)
             y_est = np.asarray(model.hindcast, dtype=float)
-            y_trend = np.asarray(model.loocv_baseline, dtype=float)   # con detrend: trend LOO
+            y_trend = np.asarray(model.loocv_baseline, dtype=float)   # with detrend: LOO trend
             idx_ph = np.asarray(model.indicator, dtype=float)
 
             for k in range(len(model.years)):
@@ -499,7 +579,7 @@ class Drought(Process):
                 overall_t.append(np.asarray(model.years, dtype=float)[fin])
                 overall_y.append(y_f)
                 overall_yhat.append(yhat_f)
-                overall_phclim.append((y_f.sum() - y_f) / (y_f.size - 1))   # LOO clim della fase
+                overall_phclim.append((y_f.sum() - y_f) / (y_f.size - 1))   # LOO climatology of the phase
 
             phase_models.append(model)
 
@@ -507,11 +587,11 @@ class Drought(Process):
             run_one_phase(ph)
 
         # -------------------------
-        # Overall row (solo se piu' fasi).
-        # Calcolata su TUTTI gli anni contro la climatologia LOO dell'intero campione,
-        # come la riga 'allyears' di M=1, cosi' M=1 e M>1 sono confrontabili direttamente.
-        # SSRMSE_phaseclimonly: skill della sola climatologia LOO di fase (quanto vale la
-        # partizione da sola, senza il campo predittore).
+        # Overall row (only with more than one phase).
+        # Computed on ALL years against the LOO climatology of the whole sample,
+        # as the 'allyears' row with M=1, so that M=1 and M>1 are directly comparable.
+        # SSRMSE_phaseclimonly: skill of the LOO phase climatology alone (the value of
+        # the partition by itself, without the predictor field).
         # -------------------------
         if len(phases) > 1 and overall_y:
             t_all = np.concatenate(overall_t)
@@ -544,23 +624,23 @@ class Drought(Process):
                 metrics_df[c] = np.nan
         metrics_df = metrics_df[keep_cols]
 
-        metrics_fp = run_root / "metrics_by_phase.csv"
+        metrics_fp = run_root / "metrics.csv"
         metrics_df.to_csv(metrics_fp, index=False)
         LOGGER.info("\n" + metrics_df.to_string(index=False))
 
         # -------------------------
         # Plots
         # -------------------------
-        combined_map_pdf = run_root / f"{glo_var_name}_corr_map_combined.pdf"
-        combined_scatter_pdf = run_root / f"{glo_var_name}_scatter_combined.pdf"
+        combined_map_pdf = run_root / "predictor_map.pdf"
+        combined_scatter_pdf = run_root / "scatterplot.pdf"
         save_combined_phase_maps_pdf(phase_models, combined_map_pdf, index_label)
         _save_loocv_scatters_pdf(phase_models, combined_scatter_pdf)
 
-        ts_file = run_root / f"{glo_var_name}_timeseries.csv"
+        ts_file = run_root / "hindcasts.csv"
         pd.DataFrame(timeseries_rows).sort_values("year").to_csv(ts_file, index=False)
 
         # -------------------------
-        # Forecast operativo
+        # Operational forecast
         # -------------------------
         response.update_status("Operational forecast...", 85)
         models_by_phase = {m.phase: m for m in phase_models}
@@ -638,21 +718,21 @@ class Drought(Process):
 
         response.update_status("Packaging outputs...", 90)
 
-        # Il target usato entra nell'archivio, cosi' la run e' riproducibile da sola
+        # The target series is added to the archive, so that the run is reproducible on its own
         try:
             shutil.copy(clim_file, run_root / f"target_{Path(clim_file).name}")
         except Exception as e:
             LOGGER.warning(f"Could not copy target file into the archive: {e}")
 
-        zip_path = run_root / f"outputs_{index_label.replace(' ', '')}.zip"
+        zip_path = run_root / "outputs.zip"
         with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
             for p in run_root.rglob("*"):
                 if p.is_file() and p != zip_path:
                     zipf.write(p, arcname=str(p.relative_to(run_root)))
         response.outputs["forecast_bundle"].file = str(zip_path)
 
-        # Copia locale della run (best effort), solo se ALBATROSS_OUT_DIR e' impostata:
-        # utile in sviluppo, disattivata di default sul server.
+        # Local copy of the run (best effort), only if ALBATROSS_OUT_DIR is set:
+        # useful in development, disabled by default on the server.
         out_root = os.environ.get("ALBATROSS_OUT_DIR")
         if out_root:
             try:

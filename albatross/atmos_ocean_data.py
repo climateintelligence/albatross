@@ -11,16 +11,16 @@ LOGGER = logging.getLogger("PYWPS")
 Function needed to download of OPeNDAP data and compute anomalies.
 """
 def _load_local_seasonal(path, var, level=None, **kwargs):
-    """Legge un NetCDF mensile PSL (ERSST, NCEP/NCAR R1) e restituisce un blocco
-    medio di n_mon mesi per anno (= RANGEEDGES + boxAverage IRIDL).
-    Lat crescente come IRIDL. `level` (es. 500.) seleziona un livello di pressione."""
+    """Read a monthly PSL NetCDF file (ERSST, NCEP/NCAR R1) and return the mean over
+    n_mon months for each year (equivalent to IRIDL RANGEEDGES + boxAverage).
+    Latitude is increasing, as in IRIDL. `level` (e.g. 500.) selects a pressure level."""
     import numpy as np
     import netCDF4
     from collections import namedtuple
 
     months, n_mon = kwargs["months"], int(kwargs["n_mon"])
     sy, ey = int(kwargs["startyr"]), int(kwargs["endyr"])
-    m0 = (months[0] - 1) % 12 + 1          # es. 0 -> Dic, -2 -> Ott
+    m0 = (months[0] - 1) % 12 + 1          # e.g. 0 -> Dec, -2 -> Oct
     m1 = (months[-1] - 1) % 12 + 1
 
     with netCDF4.Dataset(path) as ds:
@@ -47,7 +47,7 @@ def _load_local_seasonal(path, var, level=None, **kwargs):
         else:
             raw = np.ma.filled(v[i0:i1, ...].astype(float), np.nan)
 
-        # toglie dimensioni di lunghezza 1 (es. zlev), tenendo sempre il tempo
+        # drop length-1 dimensions (e.g. zlev), always keeping time
         keep = [0] + [k for k in range(1, raw.ndim) if raw.shape[k] != 1]
         arr = raw.reshape([raw.shape[k] for k in keep])
         if arr.ndim != 3:
@@ -57,7 +57,7 @@ def _load_local_seasonal(path, var, level=None, **kwargs):
         lat = np.asarray(ds[latname][:], dtype=float)
         lon = np.asarray(ds[lonname][:], dtype=float)
 
-    if lat[0] > lat[-1]:                   # PSL: lat decrescente -> crescente (come IRIDL)
+    if lat[0] > lat[-1]:                   # PSL: decreasing -> increasing latitude (as in IRIDL)
         arr, lat = arr[:, ::-1, :], lat[::-1]
 
     grid = np.stack([arr[12 * y: 12 * y + n_mon].mean(0) for y in range(n_yr)])
@@ -80,12 +80,12 @@ def _local_path(env, default_name):
 # -----------------------------------------------------------------------------
 PSL_SOURCES = {
     # key: (env variable for the file, file name, URL)
-    "sst": ("ALBATROSS_SST_NC", "sst.mnmean.nc",
-            "https://downloads.psl.noaa.gov/Datasets/noaa.ersst.v5/sst.mnmean.nc"),
+    "sst": ("ALBATROSS_SST_NC", "sst.mnmean.v6.nc",
+            "https://downloads.psl.noaa.gov/Datasets/noaa.ersst.v6/sst.mnmean.nc"),
     "slp": ("ALBATROSS_SLP_NC", "slp.mon.mean.nc",
             "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis.derived/surface/slp.mon.mean.nc"),
     "hgt": ("ALBATROSS_HGT_NC", "hgt.mon.mean.nc",
-            "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis/Monthlies/pressure/hgt.mon.mean.nc"),
+            "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis.derived/pressure/hgt.mon.mean.nc"),
     "orog": ("ALBATROSS_OROG_NC", "hgt.sfc.nc",
              "https://downloads.psl.noaa.gov/Datasets/ncep.reanalysis/surface/hgt.sfc.nc"),
 }
@@ -188,17 +188,12 @@ def _load_psl(key, var, level=None, **kwargs):
 
 def openDAPsst(**kwargs):
     """
-    SST ERSST v5 from the NOAA PSL file, downloaded and cached locally
-    (ALBATROSS_SST_NC, or ALBATROSS_DATA_DIR/sst.mnmean.nc).
-    IRIDL is used only if the PSL file cannot be obtained at all.
+    SST ERSST v6 from the NOAA PSL file, downloaded and cached locally
+    (ALBATROSS_SST_NC, or ALBATROSS_DATA_DIR/sst.mnmean.v6.nc).
     """
-    try:
-        out = _load_psl("sst", "sst", **kwargs)
-        LOGGER.info("SST read from local PSL copy")
-        return out
-    except RuntimeError as e:
-        LOGGER.warning(f"{e}: falling back to IRIDL")
-    return _openDAPsst_iridl(**kwargs)
+    out = _load_psl("sst", "sst", **kwargs)
+    LOGGER.info("SST read from local PSL copy")
+    return out
 
 
 def _openDAPsst_iridl(**kwargs):
@@ -626,8 +621,8 @@ def load_climdata(**kwargs):
     for y in range(n_year):
         mons = idx_start + 12 * y + month_offsets
 
-        # Stagione troncata dalla fine (o dall'inizio) della serie: NaN, non media parziale.
-        # Con aggregation="sum" una finestra parziale darebbe un totale sottostimato.
+        # Season truncated by the end (or start) of the series: NaN, not a partial mean.
+        # With aggregation="sum" a partial window would give an underestimated total.
         in_range = (mons >= 0) & (mons < len(data.values))
         if not in_range.all():
             n_dropped += 1
@@ -639,8 +634,8 @@ def load_climdata(**kwargs):
 
         vals = np.asarray(data.values)[mons].astype(float)
 
-        # Buchi interni: np.nansum/np.nanmean su una finestra parzialmente NaN
-        # restituiscono un valore parziale, non NaN, quindi va controllato qui.
+        # Internal gaps: np.nansum/np.nanmean on a partly NaN window return a
+        # partial value rather than NaN, so this is checked here.
         n_valid = int(np.isfinite(vals).sum())
         if n_valid < n_months:
             n_dropped += 1
@@ -678,7 +673,7 @@ def create_phase_index2(**kwargs):
         raise ValueError(f"Index start date not found: {startyr}-{startmon:02d}")
     i0 = int(idx_start[0][0])
 
-    # Sentinelle (-999, -99.99, -99.9) -> NaN
+    # Missing-value codes (-999, -99.99, -99.9) -> NaN
     vals = np.asarray(index.values, dtype=float).copy()
     vals[vals <= -99.0] = np.nan
 
@@ -687,12 +682,12 @@ def create_phase_index2(**kwargs):
     for year in range(kwargs['n_year']):
         mons = i0 + 12 * year + arange(n_mon)
         if mons[-1] >= vals.size:
-            continue                      # finestra oltre la fine del file -> NaN
+            continue                      # window beyond the end of the file -> NaN
         w = vals[mons]
-        if np.isfinite(w).all():          # finestra incompleta -> NaN, non media parziale
+        if np.isfinite(w).all():          # incomplete window -> NaN, not a partial mean
             index_avg[year] = w.mean()
 
-    # gli anni con indice NaN restano fuori da tutte le fasi
+    # years with a NaN index are left out of all phases
     finite_pos = np.where(np.isfinite(index_avg))[0]
     idx = finite_pos[np.argsort(index_avg[finite_pos])]
     nyrs = idx.size

@@ -8,6 +8,7 @@ matplotlib>=3.8,<3.9
 basemap==1.4.1
 pydap>=3.5.4,<3.6
 scipy>=1.15,<2
+netCDF4
 scikit-learn
 requests
 werkzeug

@@ -9,8 +9,8 @@ seasonal_var = namedtuple("seasonal_var", ("data", "lat", "lon"))
 
 
 def linear_trend_fit(t, Z):
-    """Trend lineare per colonna, NaN ignorati. t: (n,), Z: (n, ...).
-    Restituisce (media, pendenza, t medio), da usare con linear_trend_eval."""
+    """Linear trend per column, ignoring NaNs. t: (n,), Z: (n, ...).
+    Returns (mean, slope, mean t), to be used with linear_trend_eval."""
     t = np.asarray(t, dtype=float)
     Z = np.asarray(Z, dtype=float)
     tc = (t - t.mean()).reshape(-1, *[1] * (Z.ndim - 1))
@@ -21,7 +21,7 @@ def linear_trend_fit(t, Z):
 
 
 def linear_trend_eval(fit, t):
-    """Valore del trend agli istanti t (estrapolazione inclusa). Forma: (len(t), ...)."""
+    """Trend value at times t (extrapolation included). Shape: (len(t), ...)."""
     Zm, slope, tbar = fit
     t = np.atleast_1d(np.asarray(t, dtype=float))
     Zm, slope = np.asarray(Zm), np.asarray(slope)
@@ -29,7 +29,7 @@ def linear_trend_eval(fit, t):
 
 
 def linear_detrend(t, Z):
-    """Residui rispetto al trend lineare stimato su tutta la serie (solo per diagnostica e mappe)."""
+    """Residuals from the linear trend fitted on the whole series (diagnostics and maps only)."""
     return np.asarray(Z, dtype=float) - linear_trend_eval(linear_trend_fit(t, Z), t)
  
 class NIPAphase(object):
@@ -60,7 +60,7 @@ class NIPAphase(object):
  
     def bootcorr(
         self, ntim=1000, corrconf=0.95, bootconf=0.80, debug=False, quick=True, seed = None,
-        lat_limit=60.0, orog_max_m=20000.0,
+        lat_limit=60.0, orog_max_m=None,
     ):
         from numpy import isnan, ma
         from albatross.utils import sig_test, vcorr
@@ -83,11 +83,11 @@ class NIPAphase(object):
         corr_grid = ma.masked_array(corr_grid, isnan(corr_grid))
  
         lat_arr = np.asarray(self.glo_var.lat, dtype=float)
-        # Alte latitudini mascherate per TUTTE le variabili (prima solo sst/tp/t2m)
+        # High latitudes are masked for all predictor fields
         if lat_limit is not None:
             corr_grid.mask [ np.abs(lat_arr) > lat_limit ] = True
 
-        # SLP sopra orografia alta = estrapolazione al livello del mare
+        # SLP over high orography is an extrapolation to sea level
         if self.glo_var_name == "slp" and orog_max_m is not None:
             from albatross.utils import high_orography_mask
             corr_grid.mask |= high_orography_mask(lat_arr, self.glo_var.lon, orog_max_m)
@@ -148,15 +148,15 @@ class NIPAphase(object):
  
     def gridCheck(self, lim=5, ntim=2, debug=False, edges="legacy"):
         """
-        Rimuove pixel isolati: un pixel tenuto viene scartato se almeno `lim` degli
-        8 vicini sono mascherati.
+        Remove isolated pixels: a retained pixel is discarded if at least `lim` of
+        its 8 neighbors are masked.
 
-        edges="legacy": comportamento originale. Prima/ultima riga (poli) e
-            prima/ultima colonna (lon 0 e lon max) NON vengono mai controllate,
-            quindi pixel isolati sui bordi sopravvivono sempre.
-        edges="fixed": controlla TUTTE le celle; longitudine periodica se la
-            griglia e' globale (lon max e lon 0 sono vicine); oltre i poli i
-            vicini contano come mascherati.
+        edges="legacy": original NIPA behavior. The first/last row (poles) and
+            the first/last column (lon 0 and lon max) are never checked, so
+            isolated pixels on the edges always survive.
+        edges="fixed": checks all cells; longitude is periodic if the grid is
+            global (lon max and lon 0 are neighbors); neighbors beyond the poles
+            count as masked.
         """
         if self.n_pre_grid < 50:
             lim = 6
@@ -205,7 +205,7 @@ class NIPAphase(object):
 
         for _ in range(ntim):
             count = 0
-            # stessa scansione sequenziale in-place dell'originale
+            # same sequential in-place scan as the legacy version
             for i in range(nlat):
                 for j in range(nlon):
                     if dat[i, j]:
@@ -217,11 +217,11 @@ class NIPAphase(object):
                                 continue
                             ii, jj = i + di, j + dj
                             if ii < 0 or ii >= nlat:
-                                n_masked += 1           # oltre il polo
+                                n_masked += 1           # beyond the pole
                                 continue
                             if jj < 0 or jj >= nlon:
                                 if not periodic:
-                                    n_masked += 1       # bordo di una griglia regionale
+                                    n_masked += 1       # edge of a regional grid
                                     continue
                                 jj %= nlon
                             n_masked += int(dat[ii, jj])
@@ -244,7 +244,7 @@ class NIPAphase(object):
         """
         PCR with optional CV, hardened against overfitting.
  
-        Changes vs your version:
+        Compared with the original NIPA implementation:
           - Ridge regression (shrinkage) instead of OLS
           - n_pc is selected by validation RMSE (not correlation)
           - explicit hard/soft caps on n_pc based on N_train
@@ -261,8 +261,8 @@ class NIPAphase(object):
         from sklearn.linear_model import Ridge, LinearRegression
         from sklearn.model_selection import KFold
 
-        # regressor="ols"  -> regressione lineare classica (minimi quadrati), in TUTTI i rami
-        # regressor="ridge"-> comportamento precedente (Ridge alpha fisso)
+        # regressor="ols"  -> ordinary least squares, in all branches
+        # regressor="ridge"-> Ridge regression with fixed alpha
         def _new_reg(a):
             return LinearRegression() if regressor == "ols" else Ridge(alpha=a)
         from collections import defaultdict
@@ -545,21 +545,21 @@ class NIPAphase(object):
         # -----------------------------
         full = {ka: v for ka, v in acc.items() if len(v)==n_folds_done} or acc
         (k_best, a_best) = min(full.items(), key=lambda kv: np.nanmedian(kv [ 1 ])) [ 0 ]
-        # --- DIAGNOSTICA: superficie RMSE su (k, alpha) ---
-        print(f"[DIAG] fase={self.phase} n={n_samples} feat={n_features} scelta k={k_best} "
+        # --- Diagnostics: RMSE surface over (k, alpha) ---
+        print(f"[DIAG] phase={self.phase} n={n_samples} feat={n_features} chosen k={k_best} "
               + ("OLS" if regressor == "ols" else f"alpha={a_best}"))
         meds = {ka: float(np.nanmedian(v)) for ka, v in full.items()}
         lo, hi = min(meds.values()), max(meds.values())
-        print(f"[DIAG]   RMSE mediano: min={lo:.1f} max={hi:.1f} spread={100*(hi-lo)/lo:.1f}%")
+        print(f"[DIAG]   median RMSE: min={lo:.1f} max={hi:.1f} spread={100*(hi-lo)/lo:.1f}%")
         for ka in sorted(meds, key=meds.get)[:5]:
             print(f"[DIAG]   k={ka[0]} alpha={ka[1]:<6} rmse={meds[ka]:.2f}")
-        # quali coppie sceglieva ogni singolo fold (il vecchio comportamento)
+        # pairs that each fold would choose on its own
         per_fold = [min(fp, key=lambda ka: float(np.sqrt(np.mean((y[te]-fp[ka])**2))))
                     for te, fp in fold_store]
-        print(f"[DIAG]   scelte per-fold: {per_fold}")
+        print(f"[DIAG]   per-fold choices: {per_fold}")
 
-        # Hindcast: previsione di ogni fold con la coppia (k, alpha) GLOBALE,
-        # scelta aggregando sui fold e non dentro il singolo fold.
+        # Hindcast: each fold is predicted with the GLOBAL (k, alpha) pair,
+        # chosen by aggregating over folds rather than within each fold.
         for te, fold_preds in fold_store:
             if (k_best, a_best) in fold_preds:
                 yhat_cv [ te ] = fold_preds [ (k_best, a_best) ]
@@ -767,8 +767,8 @@ class NIPAphase(object):
         return np.asarray(y_pred).ravel()
 
     def project_pcs(self, X_val: np.ndarray) -> np.ndarray:
-        """Proietta campi (2D o 3D) sulle EOF di lin_model, con lo stesso preprocessing
-        del training (pesi, maschera, imputazione, centratura). Ritorna (n, n_pc)."""
+        """Project fields (2D or 3D) onto the EOFs of lin_model, with the same preprocessing
+        as in training (weights, mask, imputation, centering). Returns (n, n_pc)."""
         import numpy as np
         from albatross.utils import weight_glo_var
 
@@ -1104,19 +1104,20 @@ class NIPAphase(object):
     def loocv_hindcast(self, corrconf=0.95, bootconf=0.80, ntim=1000, seed=42,
                        explained_variance_threshold=0.75, n_pc_fixed=None,
                        regressor="ridge", quick=False, detrend=False, t=None,
-                       lat_limit=60.0, orog_max_m=20000.0):
+                       lat_limit=60.0, orog_max_m=None):
         """
-        LOOCV: per ogni anno i, maschera (bootcorr + gridCheck), PCA e regressione
-        stimate SOLO sugli altri n-1 anni, poi previsione di i.
-        Se sul train non resta nessun pixel, la previsione e' la media del train.
+        LOOCV: for each year i, the mask (bootcorr + gridCheck), PCA and regression
+        are estimated ONLY on the other n-1 years, then year i is predicted.
+        If no pixel is retained on the training years, the prediction is the training mean.
 
-        detrend=True (richiede t = anni della fase): in ogni fold si stima un trend lineare
-        SOLO sul training, per il target e per ogni pixel; lo si toglie dal training e,
-        estrapolato, dall'anno i. Il modello predice l'anomalia rispetto al trend:
-            previsione_i = trend_y(t_i) + anomalia predetta
-        self.loocv_baseline contiene la baseline di confronto per anno:
-            detrend=False -> media del training (climatologia LOO)
-            detrend=True  -> trend del training estrapolato a t_i
+        detrend=True (requires t = years of the phase): in each fold a linear trend is
+        estimated ONLY on the training years, for the target and for each pixel; it is
+        removed from the training data and, extrapolated, from year i. The model predicts
+        the anomaly with respect to the trend:
+            prediction_i = trend_y(t_i) + predicted anomaly
+        self.loocv_baseline holds the reference baseline for each year:
+            detrend=False -> training mean (LOO climatology)
+            detrend=True  -> training trend extrapolated to t_i
         """
         X_all = np.asarray(self.glo_var.data)
         y_all = np.asarray(self.clim_data).ravel()
@@ -1126,8 +1127,8 @@ class NIPAphase(object):
         n_fallback = 0
         keep_count = np.zeros(X_all.shape[1:], dtype=int)
         baseline = np.full(n, np.nan)
-        # PC out-of-sample: per ogni anno i, la proiezione di i sulle EOF del suo fold
-        # (quello che la regressione usa davvero). Max 8 PC come in crossvalpcr.
+        # Out-of-sample PCs: for each year i, the projection of i onto the EOFs of its fold
+        # (what the regression actually uses). At most 8 PCs, as in crossvalpcr.
         K_MAX = 8
         pc_oos = np.full((n, K_MAX), np.nan)
         coef_oos = np.full((n, K_MAX), np.nan)
@@ -1136,10 +1137,10 @@ class NIPAphase(object):
         npix_oos = np.zeros(n, dtype=int)
         if detrend:
             if t is None:
-                raise ValueError("detrend=True richiede t (anni della fase)")
+                raise ValueError("detrend=True requires t (years of the phase)")
             t = np.asarray(t, dtype=float).ravel()
             if t.size != n:
-                raise ValueError(f"t ha {t.size} valori, attesi {n}")
+                raise ValueError(f"t has {t.size} values, expected {n}")
 
         for i in range(n):
             tr = np.ones(n, dtype=bool)
@@ -1175,7 +1176,7 @@ class NIPAphase(object):
                                  n_pc_fixed=n_pc_fixed, regressor=regressor)
 
             if fold.lin_model is None:
-                yhat[i] = offset + float(np.mean(y_tr))   # nessun predittore -> baseline del train
+                yhat[i] = offset + float(np.mean(y_tr))   # no predictor -> training baseline
                 n_fallback += 1
                 continue
 
@@ -1183,8 +1184,8 @@ class NIPAphase(object):
             yhat[i] = offset + float(fold.lin_model["regression"].predict(pcs_i[None, :])[0])
             keep_count += ~np.ma.getmaskarray(fold.corr_grid)
 
-            # Segno delle EOF arbitrario per fold: lo fisso con r(PC_train, y_train) >= 0.
-            # Flippo PC e coefficiente insieme, quindi la previsione non cambia.
+            # The EOF sign is arbitrary in each fold: fix it so that r(PC_train, y_train) >= 0.
+            # PC and coefficient are flipped together, so the prediction does not change.
             k = min(int(fold.lin_model["n_pc"]), K_MAX)
             coef = np.asarray(fold.lin_model["regression"].coef_, dtype=float).ravel()
             for j in range(k):
@@ -1208,26 +1209,26 @@ class NIPAphase(object):
         self.loocv_baseline = baseline
         self.loocv_detrend = bool(detrend)
         if n_fallback:
-            print(f"[LOOCV] fase={self.phase}: {n_fallback}/{n} anni senza pixel -> climatologia")
+            print(f"[LOOCV] phase={self.phase}: {n_fallback}/{n} years without pixels -> climatology")
         return yhat
     # ------------------------------------------------------------------
-    # Modello operativo (forecast)
+    # Operational model (forecast)
     # ------------------------------------------------------------------
     def fit_final(self, t, corrconf=0.95, bootconf=0.80, ntim=1000, seed=42,
                   explained_variance_threshold=0.75, n_pc_fixed=None,
                   regressor="ridge", quick=False, detrend=False,
-                  lat_limit=60.0, orog_max_m=20000.0):
+                  lat_limit=60.0, orog_max_m=None):
         """
-        Modello operativo della fase: gli STESSI passi di un fold di loocv_hindcast
-        (trend, screening, gridCheck, PCA, regressione), stimati su TUTTI gli anni
-        della fase. Serve solo per il forecast di anni non usati nella stima; la skill
-        riportata resta quella LOOCV.
+        Operational model of the phase: the SAME steps as a fold of loocv_hindcast
+        (trend, screening, gridCheck, PCA, regression), estimated on ALL years of the
+        phase. It is used only to forecast years not used in the estimation; the
+        reported skill remains the LOOCV one.
         """
         X_all = np.asarray(self.glo_var.data, dtype=float)
         y_all = np.asarray(self.clim_data, dtype=float).ravel()
         t = np.asarray(t, dtype=float).ravel()
         if t.size != y_all.size:
-            raise ValueError(f"t ha {t.size} valori, attesi {y_all.size}")
+            raise ValueError(f"t has {t.size} values, expected {y_all.size}")
 
         if detrend:
             fy = linear_trend_fit(t, y_all)
@@ -1254,7 +1255,7 @@ class NIPAphase(object):
             fold.crossvalpcr(xval=False, explained_variance_threshold=explained_variance_threshold,
                              n_pc_fixed=n_pc_fixed, regressor=regressor)
 
-        # segno della EOF1 fissato come in LOOCV: r(PC1, y) >= 0 (solo per il reporting)
+        # EOF1 sign fixed as in LOOCV: r(PC1, y) >= 0 (reporting only)
         sign = 1.0
         if fold.lin_model is not None and fold.pcs is not None:
             pc1 = fold.pcs[:, 0]
@@ -1273,11 +1274,11 @@ class NIPAphase(object):
         return self.final_model
 
     def predict_final(self, X_new, t_new):
-        """Applica il modello operativo al campo predittore (anomalie, 2D) dell'anno t_new.
-        Ritorna forecast, componente trend, componente teleconnessione, PC1 orientata."""
+        """Apply the operational model to the predictor field (anomalies, 2D) of year t_new.
+        Returns forecast, trend component, teleconnection component, oriented PC1."""
         fm = getattr(self, "final_model", None)
         if fm is None:
-            raise ValueError("Modello operativo assente: chiamare fit_final prima.")
+            raise ValueError("No operational model: call fit_final first.")
         X_new = np.asarray(X_new, dtype=float)
         t_new = float(t_new)
 
@@ -1301,15 +1302,15 @@ class NIPAphase(object):
 
     def save_final_model(self, out_dir, clim_2d):
         """
-        Salva il modello operativo in un unico NPZ autosufficiente
-        (final_model_<fase>.npz), riapplicabile offline con utils.apply_final_model.
-        clim_2d: climatologia per pixel sottratta al campo grezzo prima del training.
+        Save the operational model in a single self-contained NPZ
+        (final_model_<phase>.npz), applicable offline with utils.apply_final_model.
+        clim_2d: per-pixel climatology subtracted from the raw field before training.
         """
         import json
         from pathlib import Path
         fm = getattr(self, "final_model", None)
         if fm is None:
-            raise ValueError("Modello operativo assente: chiamare fit_final prima.")
+            raise ValueError("No operational model: call fit_final first.")
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         fold = fm["fold"]

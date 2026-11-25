@@ -131,7 +131,7 @@ def plot_model_results(model, filepath=None, crv_flag=True, ax=None):
         plt.close(fig)
 
 def weight_glo_var(glo_var):
-    """Restituisce un NUOVO seasonal_var pesato per cos(lat); non modifica l'input."""
+    """Return a NEW seasonal_var weighted by cos(lat); the input is not modified."""
     w = np.cos(np.radians(np.asarray(glo_var.lat, dtype=float)))
     data = np.asarray(glo_var.data, dtype=float) * w[None, :, None]
     return type(glo_var)(data, glo_var.lat, glo_var.lon)
@@ -269,7 +269,7 @@ def glo_var_Map(nipaPhase, cmap="RdBu_r", fig=None, ax=None):
     m.drawcoastlines(linewidth=0.15)
     m.fillcontinents(color='#eeeeee', lake_color='#ffffff')
 
-    # Griglia ogni 30° in lat e 60° in lon, con etichette a sinistra e in basso
+    # Grid every 30° in lat and 60° in lon, labeled on the left and bottom
     m.drawparallels(np.arange(-60, 61, 30), linewidth=0.3, color="0.5", dashes=[1, 2],
                     labels=[1, 0, 0, 0], fontsize=7)
     m.drawmeridians(np.arange(0, 360, 60), linewidth=0.3, color="0.5", dashes=[1, 2],
@@ -290,7 +290,7 @@ def glo_var_Map(nipaPhase, cmap="RdBu_r", fig=None, ax=None):
     )
 
     divider = make_axes_locatable(ax)
-    cax = divider.append_axes('bottom', size='5%', pad=0.3)   # spazio per le etichette di lon
+    cax = divider.append_axes('bottom', size='5%', pad=0.3)   # room for the lon labels
     cbar = fig.colorbar(im1, cax=cax, orientation='horizontal')
     cbar.set_label('Correlation coefficient', fontsize=9)
     cbar.ax.tick_params(labelsize=7)
@@ -352,12 +352,12 @@ def lag_to_month():
 
 def _compute_phase_thresholds(index_avg: np.ndarray, phaseind: dict) -> dict:
     """
-    Soglie derivate dai tagli EFFETTIVI della partizione per rango, non da np.quantile.
+    Thresholds derived from the ACTUAL cuts of the rank-based partition, not from np.quantile.
 
-    La soglia fra la fase k e la k+1 e' il valore massimo dell'indice osservato
-    nella fase k. Con pick_phase_from_thresholds (prima fase con x <= thr) questo
-    riproduce esattamente la partizione di training per ogni anno, tranne quando
-    lo stesso valore dell'indice cade a cavallo di un taglio (caso segnalato).
+    The threshold between phase k and phase k+1 is the maximum index value observed
+    in phase k. With pick_phase_from_thresholds (first phase with x <= thr) this
+    reproduces the training partition exactly for every year, except when the same
+    index value falls on both sides of a cut (a warning is issued).
     """
     v = np.asarray(index_avg, dtype=float)
     labels = list(phaseind.keys())
@@ -368,7 +368,7 @@ def _compute_phase_thresholds(index_avg: np.ndarray, phaseind: dict) -> dict:
         vals = v[np.asarray(phaseind[lab], dtype=bool)]
         vals = vals[np.isfinite(vals)]
         if vals.size == 0:
-            raise ValueError(f"Fase '{lab}' vuota: impossibile derivare la soglia.")
+            raise ValueError(f"Phase '{lab}' is empty: cannot derive the threshold.")
         thresholds.append(float(np.max(vals)))
 
     for lab, nxt, thr in zip(labels[:-1], labels[1:], thresholds):
@@ -381,13 +381,13 @@ def _compute_phase_thresholds(index_avg: np.ndarray, phaseind: dict) -> dict:
             )
 
     if any(b < a for a, b in zip(thresholds, thresholds[1:])):
-        raise ValueError(f"Soglie non monotone: {thresholds}")
+        raise ValueError(f"Thresholds are not monotonic: {thresholds}")
 
     qmap = {2: [0.5], 3: [1/3, 2/3], 4: [0.25, 0.5, 0.75], 5: [0.2, 0.4, 0.6, 0.8]}
     return {
         "n_phases": nph,
         "labels": labels,
-        "quantiles": qmap.get(nph, []),   # informativo, non usato per i tagli
+        "quantiles": qmap.get(nph, []),   # for information only, not used for the cuts
         "thresholds": thresholds,
     }
 
@@ -496,7 +496,6 @@ def apply_saved_pcr(workdir: Path, phase: str, field_2d: np.ndarray) -> float:
 def resolve_target_input(inp, outdir: Path) -> Path:
     """
     Download target file if input is a URL, or accept uploaded file.
-    Compatible with your original behavior.
     """
     import requests
     from urllib.parse import urlparse
@@ -649,14 +648,14 @@ def _grid_shape(n: int, max_cols: int = 2) -> tuple[int, int]:
     return nrows, ncols
 
 
-# Nomi delle fasi come nel paper (phase modes 2-4)
+# Phase names (phase modes 2-4)
 _PHASE_NAMES = {"neg": "negative", "neutneg": "neutral-negative", "neutral": "neutral",
                 "neutpos": "neutral-positive", "pos": "positive"}
 
 
 def phase_title(phase: str, indicator: str | None, n_phases: int = None) -> str:
-    """Titolo di un pannello: 'All years' oppure 'Negative phase', ecc. (senza nome dell'indice,
-    che va nella didascalia)."""
+    """Panel title: 'All years', 'Negative phase', etc. (without the index name,
+    which goes in the caption)."""
     if phase == "allyears":
         return "All years"
     name = f"{_PHASE_NAMES.get(phase, phase)} phase"
@@ -745,20 +744,20 @@ def save_combined_phase_scatters_pdf(
 
 
 # -----------------------------------------------------------------------------
-# Funzioni richieste da wps_drought.py (diagnostica LOOCV, forecast, mappe r)
+# Functions used by wps_drought.py (LOOCV diagnostics, forecast, r maps)
 # -----------------------------------------------------------------------------
 def forecast_index_value(index_arr) -> float:
-    """Valore dell'indice per l'anno di forecast: ultimo valore valido della serie."""
+    """Index value for the forecast year: last valid value of the series."""
     return latest_valid_index_value(index_arr)
 
 
 def compute_loocv_diagnostics(y_obs, y_est, eps: float = 1e-12) -> dict:
     """
-    Diagnostiche rispetto alla climatologia LOOCV (media senza l'anno i):
-      r_pvalue        p-value bilaterale della correlazione osservato/previsto
-      frac_beats_clim frazione di anni in cui |errore modello| < |errore climatologia|
-      sign_acc        frazione di anni con segno dell'anomalia prevista = osservata
-      err_iqr         scarto interquartile dell'errore (previsto - osservato)
+    Diagnostics relative to the LOOCV climatology (mean without year i):
+      r_pvalue        two-sided p-value of the observed/predicted correlation
+      frac_beats_clim fraction of years with |model error| < |climatology error|
+      sign_acc        fraction of years in which the predicted anomaly has the observed sign
+      err_iqr         interquartile range of the error (predicted - observed)
     """
     y, yhat = _paired_finite(y_obs, y_est)
     n = int(y.size)
@@ -784,8 +783,8 @@ def compute_loocv_diagnostics(y_obs, y_est, eps: float = 1e-12) -> dict:
 
 def compute_skill_vs_baseline(y_obs, y_est, y_base, eps: float = 1e-12) -> dict:
     """
-    Skill rispetto a una baseline esterna (in wps_drought: la climatologia LOOCV
-    calcolata DENTRO ogni fase). Chiavi distinte da compute_skill_mae_rmse.
+    Skill relative to an external baseline (in wps_drought: the LOOCV climatology
+    computed WITHIN each phase). Keys differ from those of compute_skill_mae_rmse.
     """
     y = np.asarray(y_obs, dtype=float).ravel()
     yhat = np.asarray(y_est, dtype=float).ravel()
@@ -815,7 +814,7 @@ def save_combined_phase_corr_values_pdf(
     figsize_per_col: float = 6.0,
     figsize_per_row: float = 3.8,
 ) -> Path:
-    """Come save_combined_phase_maps_pdf, ma colora i pixel con r (corr_grid_full), scala -1..+1."""
+    """As save_combined_phase_maps_pdf, but pixels are colored by r (corr_grid_full), scale -1..+1."""
     from mpl_toolkits.basemap import Basemap
 
     nph = len(phase_models)
@@ -849,14 +848,14 @@ def save_combined_phase_corr_values_pdf(
 
 
 # -----------------------------------------------------------------------------
-# Maschere fisiche sui predittori
+# Physical masks on the predictor fields
 # -----------------------------------------------------------------------------
 from functools import lru_cache as _lru_cache
 
 
 @_lru_cache(maxsize=4)
 def _load_orography(path: str):
-    """Orografia NCEP/NCAR R1 (hgt.sfc.nc, PSL), in metri, con lat crescente."""
+    """NCEP/NCAR R1 orography (hgt.sfc.nc, PSL), in meters, with increasing latitude."""
     import netCDF4
     ds = netCDF4.Dataset(path)
     h = np.squeeze(np.ma.filled(ds["hgt"][:].astype(float), np.nan))
@@ -869,7 +868,7 @@ def _load_orography(path: str):
 
 
 def high_orography_mask(lat, lon, max_elev_m: float, path: str | None = None) -> np.ndarray:
-    """True dove l'orografia NCEP R1 supera max_elev_m (per mascherare la SLP)."""
+    """True where the NCEP R1 orography exceeds max_elev_m (to mask SLP)."""
     import os
     from pathlib import Path
     if path is None:
@@ -880,39 +879,39 @@ def high_orography_mask(lat, lon, max_elev_m: float, path: str | None = None) ->
             path = os.environ.get("ALBATROSS_OROG_NC", os.path.expanduser("~/data/hgt.sfc.nc"))
     if not Path(path).exists():
         raise FileNotFoundError(
-            f"Orografia non trovata: {path}. Scarica hgt.sfc.nc di NCEP/NCAR R1 da NOAA PSL "
-            f"oppure passa orog_max_m=None per disattivare la maschera."
+            f"Orography not found: {path}. Download hgt.sfc.nc of NCEP/NCAR R1 from NOAA PSL "
+            f"or pass orog_max_m=None to disable the mask."
         )
     h, hlat, hlon = _load_orography(path)
     lat = np.asarray(lat, dtype=float)
     lon = np.asarray(lon, dtype=float)
     if h.shape != (lat.size, lon.size) or not (np.allclose(hlat, lat) and np.allclose(hlon, lon)):
         raise ValueError(
-            f"Griglia orografia {h.shape} diversa da quella del predittore {(lat.size, lon.size)}."
+            f"Orography grid {h.shape} differs from the predictor grid {(lat.size, lon.size)}."
         )
     return np.nan_to_num(h, nan=0.0) > max_elev_m
 
 
 # -----------------------------------------------------------------------------
-# Applicazione offline del modello operativo (indipendente dal WPS)
+# Offline application of the operational model (independent of the WPS)
 # -----------------------------------------------------------------------------
 def apply_final_model(npz_path, field_2d, year) -> dict:
     """
-    Riapplica offline un modello salvato da NIPAphase.save_final_model.
+    Apply offline a model saved by NIPAphase.save_final_model.
 
-    field_2d : campo predittore GREZZO (nlat, nlon) dell'anno `year`, mediato sugli
-               stessi mesi del training e sulla stessa griglia (lat crescente).
-    year     : anno della stagione target (stessa convenzione degli anni di training).
+    field_2d : RAW predictor field (nlat, nlon) of year `year`, averaged over the
+               same months as in training and on the same grid (increasing latitude).
+    year     : year of the target season (same convention as the training years).
 
-    Passi identici al servizio: anomalia (clim_2d), detrend estrapolato all'anno,
-    peso cos(lat), maschera, imputazione, centratura, proiezione su EOF, regressione,
-    + trend del target.
+    Same steps as the service: anomaly (clim_2d), trend extrapolated to the year,
+    cos(lat) weighting, mask, imputation, centering, projection onto the EOF,
+    regression, plus the target trend.
     """
     p = np.load(npz_path, allow_pickle=False)
     lat = p["lat"]
     field = np.asarray(field_2d, dtype=float)
     if field.shape != (lat.size, p["lon"].size):
-        raise ValueError(f"Griglia {field.shape} diversa da quella del modello {(lat.size, p['lon'].size)}")
+        raise ValueError(f"Grid {field.shape} differs from the model grid {(lat.size, p['lon'].size)}")
     field = field - p["clim_2d"]
     year = float(year)
 
