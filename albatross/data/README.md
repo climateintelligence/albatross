@@ -28,6 +28,6 @@ missing months are excluded from the analysis and listed in the run configuratio
 ## Climate indices
 
 The other files are monthly climate indices used for phase conditioning, in the same
-format: `NINO 3.4`, `NINO 12` (Niño 1+2), `SOI`, `DMI`, `NAO`, `AO`, `PNA`, `WP`,
+format: `NINO 3.4`, `NINO 12` (shown as `NINO 1+2` in the service), `SOI`, `DMI`, `NAO`, `AO`, `PNA`, `WP`,
 `EAWR`, `SCA`, `QBO`. They are taken from NOAA (PSL and CPC). `PDO.txt` and `ONI.txt` are not selectable
 in the service.

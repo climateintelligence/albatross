@@ -76,6 +76,9 @@ LOOCV_CFG = dict(
 )
 MAP_KEEP_FREQ = 0.5     # pixels shown in the map: retained in at least this fraction of folds
 
+# Index names shown in the interface that differ from the file name in albatross/data
+_INDEX_FILES = {"NINO 1+2": "NINO 12"}
+
 
 # -----------------------------------------------------------------------------
 # Local helpers
@@ -284,8 +287,8 @@ class Drought(Process):
                 abstract="Index used to split the years into phases. Required with more than one "
                          "phase; with one phase it has no effect.",
                 data_type="string",
-                allowed_values=["none", "SCA", "EAWR", "AO", "DMI", "SOI", "WP", "PNA", "NAO",
-                                "QBO", "NINO 3.4", "NINO 12"],
+                allowed_values=["none", "NINO 3.4", "NINO 1+2", "SOI", "DMI", "NAO", "AO", "PNA",
+                                "WP", "EAWR", "SCA", "QBO"],
                 default="none",
                 min_occurs=0,
             ),
@@ -313,7 +316,7 @@ class Drought(Process):
                           as_reference=True, supported_formats=[FORMAT_CSV]),
             ComplexOutput(identifier="forecast_file", title="Hindcast table",
                           abstract="Observed target and leave-one-out hindcast for each year (CSV).",
-                          as_reference=True, supported_formats=[FORMATS.TEXT]),
+                          as_reference=True, supported_formats=[FORMAT_CSV]),
             ComplexOutput(identifier="glo_var_map", title="Predictor maps",
                           abstract="Cells retained in at least half of the leave-one-out folds, colored "
                                    "by their correlation with the target, one panel per phase (PDF).",
@@ -330,13 +333,15 @@ class Drought(Process):
         super().__init__(
             self._handler,
             identifier="drought",
-            title="Albatross",
-            abstract="Seasonal hydroclimate forecast with leakage-free LOOCV skill, using EOF/PCR and climate indices.",
+            title="Albatross: a climate service for seasonal forecasts of hydroclimatic variables",
+            abstract="Seasonal forecast of a user-supplied hydroclimatic variable from global predictor "
+                     "fields (generalized NIPA), with leave-one-out skill against climatology and maps "
+                     "of the predictor regions.",
             metadata=[
                 Metadata("PyWPS", "https://pywps.org/"),
                 Metadata("Birdhouse", "http://bird-house.github.io/"),
             ],
-            version="0.3",
+            version="0.2.0",
             inputs=inputs,
             outputs=outputs,
             store_supported=True,
@@ -367,7 +372,7 @@ class Drought(Process):
                                  f"'Phase conditioning: climate index', or set the number of "
                                  f"phases to 1.")
             indicator = indicator.upper()
-            index_file = files("albatross").joinpath("data", f"{indicator}.txt")
+            index_file = files("albatross").joinpath("data", f"{_INDEX_FILES.get(indicator, indicator)}.txt")
         else:
             indicator, index_file = None, None
         index_label = indicator if M > 1 else "noindex"
